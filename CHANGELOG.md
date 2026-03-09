@@ -6,6 +6,23 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Tag hierarchy (3 levels)**
+  - Tags support subtags and sub-subtags (tag › subtag › sub-subtag)
+  - Create-on-the-fly: create tags, subtags, and sub-subtags when typing a new name
+  - Hierarchical display in dashboard and reports with expand/collapse
+
+- **Transactions**
+  - Recent-only view: show last 30 days by default with "View all" option
+  - Date range filter when viewing all transactions
+  - Bulk tag edit: change tags for multiple transactions at once
+  - Subtag filter: include/exclude specific subtags when filtering by parent tag
+
+- **UX improvements**
+  - All forms (new transaction, tag, account) open in modal/popup to avoid scrolling
+  - Full tag path display on mobile with proper wrapping (no truncation)
+  - Account name no longer truncated on mobile
+  - Improved tag pills layout with flex-wrap
+
 - **Authentication with Supabase**
   - Email-only login via magic link (no password required)
   - User data isolated per account with Row Level Security (RLS)
@@ -37,6 +54,11 @@ All notable changes to this project will be documented in this file.
   - Full-screen app experience
 
 ### Changed
+
+- Reports page redirects to Dashboard (unified view)
+- Dashboard: month selector and hierarchical tag display
+- Transaction list: stacked layout on mobile (description above, value/actions below)
+- Tag filter: dropdown for subtags (bottom sheet on mobile)
 
 - Navigation shows full menu only when logged in
 - Sign out clears local data to prevent data leakage on shared devices

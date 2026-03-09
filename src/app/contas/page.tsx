@@ -27,7 +27,6 @@ export default function ContasPage() {
     setFormNome(conta.nome);
     setFormCartaoCredito(conta.isCartaoCredito ?? false);
     setFormDataFechamento(conta.dataFechamento ?? 10);
-    setShowForm(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -90,14 +89,20 @@ export default function ContasPage() {
         </button>
       </div>
 
-      {showForm && (
-        <form
-          onSubmit={handleSubmit}
-          className="glass rounded-xl p-6 space-y-4"
+      {showForm && !editingConta && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 overflow-y-auto"
+          onClick={() => {
+            setShowForm(false);
+            setEditingConta(null);
+          }}
         >
-          <h2 className="text-lg font-semibold text-slate-200">
-            {editingConta ? "Editar conta" : "Nova conta"}
-          </h2>
+          <form
+            onSubmit={handleSubmit}
+            className="glass rounded-xl p-6 space-y-4 w-full max-w-md my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+          <h2 className="text-lg font-semibold text-slate-200">Nova conta</h2>
           <div>
             <label className="block text-sm text-slate-400 mb-1">Nome</label>
             <input
@@ -144,7 +149,7 @@ export default function ContasPage() {
               type="submit"
               className="px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 active:opacity-90 cursor-pointer min-h-[44px]"
             >
-              {editingConta ? "Salvar" : "Criar"}
+              Criar
             </button>
             <button
               type="button"
@@ -157,7 +162,8 @@ export default function ContasPage() {
               Cancelar
             </button>
           </div>
-        </form>
+          </form>
+        </div>
       )}
 
       <div className="glass rounded-xl p-6">
@@ -166,36 +172,89 @@ export default function ContasPage() {
         </h2>
         <div className="flex flex-wrap gap-2">
           {contas.map((conta) => (
-            <div
-              key={conta.id}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700"
-            >
-              <span className="text-slate-200">{conta.nome}</span>
-              {conta.isCartaoCredito && (
-                <span
-                  className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40"
-                  title={conta.dataFechamento ? `Fechamento: dia ${conta.dataFechamento}` : undefined}
+            <div key={conta.id}>
+              {editingConta?.id === conta.id ? (
+                <form
+                  onSubmit={handleSubmit}
+                  className="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-slate-800/50 border border-slate-700"
                 >
-                  <CreditCard size={12} />
-                  {conta.dataFechamento ? `Dia ${conta.dataFechamento}` : "CC"}
-                </span>
+                  <input
+                    type="text"
+                    value={formNome}
+                    onChange={(e) => setFormNome(e.target.value)}
+                    placeholder="Nome"
+                    className="flex-1 min-w-[120px] px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                    required
+                  />
+                  <label className="flex items-center gap-1.5 text-sm text-slate-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formCartaoCredito}
+                      onChange={(e) => setFormCartaoCredito(e.target.checked)}
+                      className="rounded border-slate-600 bg-slate-800 text-brand-500"
+                    />
+                    CC
+                  </label>
+                  {formCartaoCredito && (
+                    <select
+                      value={formDataFechamento}
+                      onChange={(e) => setFormDataFechamento(parseInt(e.target.value, 10))}
+                      className="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm"
+                    >
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((dia) => (
+                        <option key={dia} value={dia}>
+                          Dia {dia}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 rounded-lg bg-brand-500 text-white text-sm font-medium"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForm(false);
+                      setEditingConta(null);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 text-sm"
+                  >
+                    Cancelar
+                  </button>
+                </form>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700">
+                  <span className="text-slate-200">{conta.nome}</span>
+                  {conta.isCartaoCredito && (
+                    <span
+                      className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                      title={conta.dataFechamento ? `Fechamento: dia ${conta.dataFechamento}` : undefined}
+                    >
+                      <CreditCard size={12} />
+                      {conta.dataFechamento ? `Dia ${conta.dataFechamento}` : "CC"}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openEditForm(conta)}
+                    className="p-1.5 rounded text-slate-500 hover:text-brand-400 hover:bg-brand-500/10 transition-colors cursor-pointer"
+                    title="Editar"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(conta.id)}
+                    className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                    title="Excluir"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               )}
-              <button
-                type="button"
-                onClick={() => openEditForm(conta)}
-                className="p-1.5 rounded text-slate-500 hover:text-brand-400 hover:bg-brand-500/10 transition-colors cursor-pointer"
-                title="Editar"
-              >
-                <Pencil size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDelete(conta.id)}
-                className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-                title="Excluir"
-              >
-                <Trash2 size={14} />
-              </button>
             </div>
           ))}
         </div>

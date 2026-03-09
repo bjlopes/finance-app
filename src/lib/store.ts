@@ -8,18 +8,27 @@ const BACKUP_KEY = "finance-app-backup";
 const DEFAULT_CONTAS = ["Nubank", "Dinheiro", "Casa", "Alimentação"];
 
 const DEFAULT_TAGS: Tag[] = [
-  { id: "1", nome: "transporte", tipo: "contexto", cor: "#3b82f6" },
-  { id: "2", nome: "alimentação", tipo: "contexto", cor: "#f59e0b" },
-  { id: "3", nome: "casa", tipo: "contexto", cor: "#8b5cf6" },
-  { id: "4", nome: "saúde", tipo: "contexto", cor: "#ef4444" },
-  { id: "5", nome: "pets", tipo: "contexto", cor: "#10b981" },
-  { id: "6", nome: "assinatura", tipo: "contexto", cor: "#ec4899" },
-  { id: "7", nome: "recorrente", tipo: "frequencia", cor: "#6b7280" },
-  { id: "8", nome: "pontual", tipo: "frequencia", cor: "#6b7280" },
-  { id: "9", nome: "necessidade", tipo: "regra", cor: "#22c55e" },
-  { id: "10", nome: "desejo", tipo: "regra", cor: "#f97316" },
-  { id: "11", nome: "investimento", tipo: "regra", cor: "#22c55e" },
+  { id: "1", nome: "transporte", cor: "#3b82f6" },
+  { id: "2", nome: "alimentação", cor: "#f59e0b" },
+  { id: "3", nome: "casa", cor: "#8b5cf6" },
+  { id: "4", nome: "saúde", cor: "#ef4444" },
+  { id: "5", nome: "pets", cor: "#10b981" },
+  { id: "6", nome: "assinatura", cor: "#ec4899" },
+  { id: "7", nome: "recorrente", cor: "#6b7280" },
+  { id: "8", nome: "pontual", cor: "#6b7280" },
+  { id: "9", nome: "necessidade", cor: "#22c55e" },
+  { id: "10", nome: "desejo", cor: "#f97316" },
+  { id: "11", nome: "investimento", cor: "#22c55e" },
 ];
+
+function migrateTag(t: Tag & { tipo?: string }): Tag {
+  const { tipo, ...rest } = t;
+  return rest;
+}
+
+function migrateTags(tags: (Tag & { tipo?: string })[]): Tag[] {
+  return tags.map(migrateTag);
+}
 
 interface ContaItem {
   id: string;
@@ -49,10 +58,12 @@ function getStored(): StoredData {
       if (backup) return backup;
       return { transacoes: [], tags: DEFAULT_TAGS, contas: getDefaultContas() };
     }
-    const parsed = JSON.parse(raw) as StoredData;
+    const parsed = JSON.parse(raw) as StoredData & { tags?: (Tag & { tipo?: string })[] };
+    const tagsRaw = parsed.tags?.length ? parsed.tags : DEFAULT_TAGS;
+    const tags = migrateTags(tagsRaw as (Tag & { tipo?: string })[]);
     return {
       transacoes: parsed.transacoes || [],
-      tags: (parsed.tags?.length ? parsed.tags : DEFAULT_TAGS) as Tag[],
+      tags,
       contas: (parsed.contas?.length ? parsed.contas : getDefaultContas()) as ContaItem[],
     };
   } catch {
@@ -66,12 +77,12 @@ function tryRestoreFromBackup(): StoredData | null {
   try {
     const raw = localStorage.getItem(BACKUP_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as StoredData & { _backupAt?: string };
+    const parsed = JSON.parse(raw) as StoredData & { _backupAt?: string; tags?: (Tag & { tipo?: string })[] };
     if (!Array.isArray(parsed.transacoes) || !Array.isArray(parsed.tags) || !Array.isArray(parsed.contas))
       return null;
     const data: StoredData = {
       transacoes: parsed.transacoes,
-      tags: parsed.tags,
+      tags: migrateTags((parsed.tags || []) as (Tag & { tipo?: string })[]),
       contas: parsed.contas,
     };
     setStored(data);
@@ -138,9 +149,10 @@ export function importBackup(json: string): { ok: boolean; error?: string } {
   if (typeof window === "undefined") return { ok: false, error: "Não disponível" };
   try {
     const parsed = JSON.parse(json) as StoredData & { _exportedAt?: string };
+    const tagsRaw = Array.isArray(parsed.tags) ? parsed.tags : DEFAULT_TAGS;
     const data: StoredData = {
       transacoes: Array.isArray(parsed.transacoes) ? parsed.transacoes : [],
-      tags: Array.isArray(parsed.tags) ? parsed.tags : DEFAULT_TAGS,
+      tags: migrateTags(tagsRaw as (Tag & { tipo?: string })[]),
       contas: Array.isArray(parsed.contas) ? parsed.contas : getDefaultContas(),
     };
     setStored(data);
@@ -192,13 +204,26 @@ export function saveTag(tag: Tag): void {
   setStored({ transacoes, tags: next, contas });
 }
 
+function getDescendantIds(tags: Tag[], parentId: string): Set<string> {
+  const ids = new Set<string>([parentId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    tags.forEach((t) => {
+      if (t.parentId && ids.has(t.parentId) && !ids.has(t.id)) {
+        ids.add(t.id);
+        changed = true;
+      }
+    });
+  }
+  return ids;
+}
+
 export function deleteTag(id: string): void {
   const { transacoes, tags, contas } = getStored();
-  setStored({
-    transacoes,
-    tags: tags.filter((t) => t.id !== id),
-    contas,
-  });
+  const toRemove = getDescendantIds(tags, id);
+  const nextTags = tags.filter((t) => !toRemove.has(t.id));
+  setStored({ transacoes, tags: nextTags, contas });
 }
 
 export function getContas(): ContaItem[] {

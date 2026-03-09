@@ -59,6 +59,13 @@ export default function BackupPage() {
             &quot;Salvar em Arquivos&quot; e salve na pasta do iCloud para ter
             o backup na nuvem.
           </p>
+          <p className="text-xs text-slate-500 mb-2">
+            Alternativa:{" "}
+            <a href="/backup-export.html" className="text-brand-400 hover:underline">
+              /backup-export.html
+            </a>{" "}
+            (exporta direto ao abrir)
+          </p>
           <button
             type="button"
             onClick={handleExport}
@@ -67,6 +74,20 @@ export default function BackupPage() {
             <Download size={20} />
             Baixar backup
           </button>
+        </div>
+
+        <div className="border-t border-slate-700/50 pt-6">
+          <h2 className="font-semibold text-slate-200 mb-2">Backup inicial</h2>
+          <p className="text-sm text-slate-400 mb-3">
+            Baixe o arquivo de backup completo (tags, contas e transações de exemplo).
+          </p>
+          <a
+            href="/financas-backup-inicial.json"
+            download="financas-backup-inicial.json"
+            className="block w-full text-center py-2 rounded-lg border border-slate-600 text-slate-300 text-sm hover:bg-slate-800/50 mb-6"
+          >
+            Baixar backup inicial
+          </a>
         </div>
 
         <div className="border-t border-slate-700/50 pt-6">

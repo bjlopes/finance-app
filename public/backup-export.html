@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Exportar backup - Finanças</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin: 0;
+      padding: 2rem;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    p { color: #94a3b8; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    button {
+      background: #22c55e;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button:hover { background: #16a34a; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .msg { margin-top: 1rem; font-size: 0.9rem; }
+    .success { color: #22c55e; }
+    .error { color: #ef4444; }
+    .hint { color: #64748b; font-size: 0.8rem; margin-top: 2rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Exportar backup</h1>
+    <p>Exporte os dados do app para um arquivo JSON. Use esta página no mesmo dispositivo/navegador onde você usa o app.</p>
+    <button id="btn" onclick="exportBackup()">Baixar backup</button>
+    <div id="msg" class="msg"></div>
+    <p class="hint">Ou acesse o app → Backup → Baixar backup</p>
+  </div>
+  <script>
+    function getData() {
+      const main = localStorage.getItem('finance-app-data');
+      if (main) {
+        try {
+          const parsed = JSON.parse(main);
+          return {
+            transacoes: Array.isArray(parsed.transacoes) ? parsed.transacoes : [],
+            tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+            contas: Array.isArray(parsed.contas) ? parsed.contas : []
+          };
+        } catch (e) {}
+      }
+      const backup = localStorage.getItem('finance-app-backup');
+      if (backup) {
+        try {
+          const parsed = JSON.parse(backup);
+          return {
+            transacoes: Array.isArray(parsed.transacoes) ? parsed.transacoes : [],
+            tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+            contas: Array.isArray(parsed.contas) ? parsed.contas : []
+          };
+        } catch (e) {}
+      }
+      return null;
+    }
+
+    function exportBackup() {
+      const btn = document.getElementById('btn');
+      const msg = document.getElementById('msg');
+      btn.disabled = true;
+      msg.textContent = '';
+      msg.className = 'msg';
+
+      const data = getData();
+      if (!data) {
+        msg.textContent = 'Nenhum dado encontrado. Use o app primeiro para criar transações.';
+        msg.className = 'msg error';
+        btn.disabled = false;
+        return;
+      }
+
+      const json = JSON.stringify({
+        ...data,
+        _exportedAt: new Date().toISOString()
+      }, null, 2);
+
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'financas-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+
+      msg.textContent = 'Backup baixado com sucesso!';
+      msg.className = 'msg success';
+      btn.disabled = false;
+    }
+  </script>
+</body>
+</html>

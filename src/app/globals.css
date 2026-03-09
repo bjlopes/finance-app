@@ -9,20 +9,43 @@
   --accent-dim: #16a34a;
   --text: #f9fafb;
   --text-muted: #9ca3af;
+  /* iPhone 17 Pro / Dynamic Island / home indicator */
+  --safe-top: env(safe-area-inset-top);
+  --safe-right: env(safe-area-inset-right);
+  --safe-bottom: env(safe-area-inset-bottom);
+  --safe-left: env(safe-area-inset-left);
 }
 
 body {
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
-  /* Safe area para iPhone notch e home indicator */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  /* Melhora interação em touch devices */
+  min-height: 100dvh;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 @layer utilities {
   .glass {
     @apply bg-slate-900/50 backdrop-blur-sm border border-slate-700/50;
+  }
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Evita zoom no iOS ao focar em inputs (font-size >= 16px) */
+@supports (padding: env(safe-area-inset-top)) {
+  input, select, textarea {
+    font-size: 16px;
   }
 }

@@ -33,13 +33,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col gap-3 w-full max-w-xs">
           <Link
             href="/login"
-            className="flex-1 px-4 py-3 rounded-xl bg-brand-500 text-white font-medium text-center hover:bg-brand-600 transition-colors active:scale-[0.98]"
+            className="flex-1 min-h-[48px] flex items-center justify-center px-4 py-3 rounded-xl bg-brand-500 text-white font-medium text-center hover:bg-brand-600 transition-colors active:scale-[0.98]"
           >
             Entrar
           </Link>
           <Link
             href="/signup"
-            className="flex-1 px-4 py-3 rounded-xl bg-slate-700 text-slate-200 font-medium text-center hover:bg-slate-600 transition-colors border border-slate-600 active:scale-[0.98]"
+            className="flex-1 min-h-[48px] flex items-center justify-center px-4 py-3 rounded-xl bg-slate-700 text-slate-200 font-medium text-center hover:bg-slate-600 transition-colors border border-slate-600 active:scale-[0.98]"
           >
             Criar conta
           </Link>

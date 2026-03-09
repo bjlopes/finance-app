@@ -1,8 +1,8 @@
 export interface Tag {
   id: string;
   nome: string;
-  tipo: "contexto" | "frequencia" | "regra" | "projeto" | "custom";
   cor: string;
+  parentId?: string; // subtag do nível 1; subtag de subtag = nível 2 (máx)
 }
 
 export interface Transacao {

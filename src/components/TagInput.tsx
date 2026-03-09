@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Plus } from "lucide-react";
 import type { Tag } from "@/types";
+import { getTagPath } from "@/lib/tags-utils";
 
 interface TagInputProps {
   selectedIds: string[];
@@ -25,12 +26,14 @@ export function TagInput({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const inputTrimmed = input.toLowerCase().trim();
-  const tagExists = tags.some((t) => t.nome === inputTrimmed);
+  const tagExists = tags.some(
+    (t) => t.nome === inputTrimmed && !t.parentId
+  );
   const canCreate = onCreateTag && inputTrimmed.length >= 2 && !tagExists;
 
   const filteredTags = tags.filter(
     (t) =>
-      t.nome.includes(inputTrimmed) &&
+      getTagPath(t, tags).toLowerCase().includes(inputTrimmed) &&
       !selectedIds.includes(t.id)
   );
 
@@ -82,7 +85,7 @@ export function TagInput({
               border: `1px solid ${tag.cor}60`,
             }}
           >
-            {tag.nome}
+            {getTagPath(tag, tags)}
             <button
               type="button"
               onClick={(e) => {
@@ -129,7 +132,7 @@ export function TagInput({
                 className="w-2 h-2 rounded-full flex-shrink-0"
                 style={{ backgroundColor: tag.cor }}
               />
-              {tag.nome}
+              {getTagPath(tag, tags)}
             </button>
           ))}
           {canCreate && (

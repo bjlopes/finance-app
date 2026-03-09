@@ -12,8 +12,8 @@ export async function POST(request: NextRequest) {
   const tag: Tag = {
     id: body.id || crypto.randomUUID(),
     nome: (body.nome || "").toLowerCase().trim(),
-    tipo: body.tipo || "contexto",
     cor: body.cor || "#6b7280",
+    ...(body.parentId ? { parentId: body.parentId } : {}),
   };
   await saveTag(tag);
   return NextResponse.json(tag);

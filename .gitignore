@@ -28,5 +28,8 @@ yarn-error.log*
 # data (opcional - remova se quiser versionar)
 /data
 
+# user backup exports
+public/*-backup-*.json
+
 # accidental duplicates
 package-lock 2.json

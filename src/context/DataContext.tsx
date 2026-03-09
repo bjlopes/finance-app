@@ -34,7 +34,7 @@ interface DataContextValue {
   deleteTransacao: (id: string) => void;
   saveTag: (t: Tag) => Tag;
   deleteTag: (id: string) => void;
-  createTag: (nome: string, tipo?: Tag["tipo"], cor?: string) => Tag;
+  createTag: (nome: string, parentId?: string, cor?: string) => Tag;
   saveConta: (c: ContaItem) => void;
   deleteConta: (id: string) => void;
   loadSampleData: () => void;
@@ -176,12 +176,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const createTag = useCallback(
-    (nome: string, tipo: Tag["tipo"] = "contexto", cor = "#6b7280"): Tag => {
-      const tag = {
+    (nome: string, parentId?: string, cor = "#6b7280"): Tag => {
+      const tag: Tag = {
         id: crypto.randomUUID(),
         nome: nome.toLowerCase().trim(),
-        tipo,
         cor,
+        ...(parentId ? { parentId } : {}),
       };
       store.saveTag(tag);
       const next = store.getTags();

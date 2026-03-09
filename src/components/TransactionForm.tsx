@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useMemo, memo, useCallback } from "react";
 import Link from "next/link";
-import { TagInput } from "@/components/TagInput";
+import { TagSubtagInput } from "@/components/TagSubtagInput";
 import { CurrencyInput } from "@/components/CurrencyInput";
+import { getTagPath } from "@/lib/tags-utils";
 import { useData } from "@/context/DataContext";
 import type { Transacao } from "@/types";
 
@@ -352,9 +353,6 @@ function TransactionFormInner({
     onSuccess?.();
   };
 
-  const handleCreateTag = (nome: string) => {
-    return Promise.resolve(createTag(nome));
-  };
 
   return (
     <form
@@ -561,14 +559,16 @@ function TransactionFormInner({
         </div>
       </div>
       <div className="min-w-0">
-        <label className="block text-sm text-slate-400 mb-1">Tags</label>
-        <TagInput
+        <label className="block text-sm text-slate-400 mb-1">Tags e subtags</label>
+        <TagSubtagInput
           selectedIds={form.tagIds}
           tags={tags}
+          onCreateTag={createTag}
           onChange={(tagIds) => {
             const temSalario = tagIds.some((id) => {
-              const nome = tags.find((t) => t.id === id)?.nome.toLowerCase() ?? "";
-              return nome === "salario" || nome === "salário";
+              const tag = tags.find((t) => t.id === id);
+              const nome = (tag ? getTagPath(tag, tags) : "").toLowerCase();
+              return nome.includes("salario") || nome.includes("salário");
             });
             setForm((f) => ({
               ...f,
@@ -576,7 +576,6 @@ function TransactionFormInner({
               receita: temSalario ? true : f.receita,
             }));
           }}
-          onCreateTag={handleCreateTag}
         />
       </div>
       <div className="min-w-0">

@@ -7,17 +7,17 @@ const TRANSACOES_FILE = path.join(DATA_DIR, "transacoes.json");
 const TAGS_FILE = path.join(DATA_DIR, "tags.json");
 
 const DEFAULT_TAGS: Tag[] = [
-  { id: "1", nome: "transporte", tipo: "contexto", cor: "#3b82f6" },
-  { id: "2", nome: "alimentação", tipo: "contexto", cor: "#f59e0b" },
-  { id: "3", nome: "casa", tipo: "contexto", cor: "#8b5cf6" },
-  { id: "4", nome: "saúde", tipo: "contexto", cor: "#ef4444" },
-  { id: "5", nome: "pets", tipo: "contexto", cor: "#10b981" },
-  { id: "6", nome: "assinatura", tipo: "contexto", cor: "#ec4899" },
-  { id: "7", nome: "recorrente", tipo: "frequencia", cor: "#6b7280" },
-  { id: "8", nome: "pontual", tipo: "frequencia", cor: "#6b7280" },
-  { id: "9", nome: "necessidade", tipo: "regra", cor: "#22c55e" },
-  { id: "10", nome: "desejo", tipo: "regra", cor: "#f97316" },
-  { id: "11", nome: "investimento", tipo: "regra", cor: "#22c55e" },
+  { id: "1", nome: "transporte", cor: "#3b82f6" },
+  { id: "2", nome: "alimentação", cor: "#f59e0b" },
+  { id: "3", nome: "casa", cor: "#8b5cf6" },
+  { id: "4", nome: "saúde", cor: "#ef4444" },
+  { id: "5", nome: "pets", cor: "#10b981" },
+  { id: "6", nome: "assinatura", cor: "#ec4899" },
+  { id: "7", nome: "recorrente", cor: "#6b7280" },
+  { id: "8", nome: "pontual", cor: "#6b7280" },
+  { id: "9", nome: "necessidade", cor: "#22c55e" },
+  { id: "10", nome: "desejo", cor: "#f97316" },
+  { id: "11", nome: "investimento", cor: "#22c55e" },
 ];
 
 async function ensureDataDir() {
