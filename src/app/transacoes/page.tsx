@@ -1,91 +1,46 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
-import { TagInput } from "@/components/TagInput";
-import type { Transacao, Tag } from "@/types";
-
-const CONTAS = ["Nubank", "Dinheiro", "Casa", "Alimentação"];
+import { useState, useMemo, useCallback } from "react";
+import { Plus, Trash2, Pencil } from "lucide-react";
+import { TransactionForm } from "@/components/TransactionForm";
+import { useData } from "@/context/DataContext";
+import type { Transacao } from "@/types";
 
 export default function TransacoesPage() {
-  const [transacoes, setTransacoes] = useState<Transacao[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { transacoes, tags, loading, deleteTransacao } = useData();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    descricao: "",
-    valor: "",
-    conta: "Nubank",
-    data: new Date().toISOString().split("T")[0],
-    tagIds: [] as string[],
-    recorrente: false,
-  });
+  const [editingTransaction, setEditingTransaction] = useState<Transacao | null>(null);
+  const [filterTagId, setFilterTagId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const load = () => {
-    Promise.all([
-      fetch("/api/transacoes").then((r) => r.json()),
-      fetch("/api/tags").then((r) => r.json()),
-    ])
-      .then(([t, tg]) => {
-        setTransacoes(t);
-        setTags(tg);
-      })
-      .finally(() => setLoading(false));
+  const transacoesFiltradas = useMemo(() => {
+    if (!filterTagId) return transacoes;
+    return transacoes.filter((t) => t.tagIds.includes(filterTagId));
+  }, [transacoes, filterTagId]);
+
+  const totalFiltrado = useMemo(
+    () => transacoesFiltradas.reduce((s, t) => s + t.valor, 0),
+    [transacoesFiltradas]
+  );
+
+  const openNewForm = () => {
+    setEditingTransaction(null);
+    setShowForm(true);
   };
 
-  useEffect(() => load(), []);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const valor = parseFloat(form.valor.replace(",", "."));
-    if (!form.descricao || isNaN(valor)) return;
-
-    fetch("/api/transacoes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        descricao: form.descricao,
-        valor: valor < 0 ? valor : -valor,
-        conta: form.conta,
-        data: form.data,
-        tagIds: form.tagIds,
-        recorrente: form.recorrente,
-      }),
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error("Erro ao salvar");
-        return r.json();
-      })
-      .then(() => {
-        setForm({
-          descricao: "",
-          valor: "",
-          conta: "Nubank",
-          data: new Date().toISOString().split("T")[0],
-          tagIds: [],
-          recorrente: false,
-        });
-        setShowForm(false);
-        load();
-      })
-      .catch(() => alert("Erro ao salvar. Tente novamente."));
+  const openEditForm = (t: Transacao) => {
+    setEditingTransaction(t);
+    setExpandedId(null);
   };
 
-  const handleCreateTag = async (nome: string): Promise<Tag> => {
-    const res = await fetch("/api/tags", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome, tipo: "contexto", cor: "#6b7280" }),
-    });
-    if (!res.ok) throw new Error("Erro ao criar tag");
-    const newTag = await res.json();
-    setTags((prev) => [...prev, newTag]);
-    return newTag;
-  };
+  const closeForm = useCallback(() => {
+    setShowForm(false);
+    setEditingTransaction(null);
+  }, []);
 
   const handleDelete = (id: string) => {
     if (!confirm("Excluir esta transação?")) return;
-    fetch(`/api/transacoes?id=${id}`, { method: "DELETE" }).then(load);
+    deleteTransacao(id);
   };
 
   const formatBRL = (n: number) =>
@@ -109,7 +64,7 @@ export default function TransacoesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-100">Transações</h1>
@@ -117,7 +72,7 @@ export default function TransacoesPage() {
         </div>
         <button
           type="button"
-          onClick={() => setShowForm(!showForm)}
+          onClick={openNewForm}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 active:opacity-90 transition-colors cursor-pointer min-h-[44px]"
         >
           <Plus size={20} />
@@ -125,170 +80,183 @@ export default function TransacoesPage() {
         </button>
       </div>
 
-      {showForm && (
-        <form
-          onSubmit={handleSubmit}
-          className="glass rounded-xl p-6 space-y-4"
-        >
-          <h2 className="text-lg font-semibold text-slate-200">
-            Nova transação
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">
-                Descrição
-              </label>
-              <input
-                type="text"
-                value={form.descricao}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, descricao: e.target.value }))
-                }
-                placeholder="Ex: Uber, Petz, Salário..."
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">
-                Valor (negativo = gasto)
-              </label>
-              <input
-                type="text"
-                value={form.valor}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, valor: e.target.value }))
-                }
-                placeholder="-172,34 ou 14000"
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-                required
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Data</label>
-              <input
-                type="date"
-                value={form.data}
-                onChange={(e) => setForm((f) => ({ ...f, data: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Conta</label>
-              <select
-                value={form.conta}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, conta: e.target.value }))
-                }
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-              >
-                {CONTAS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Tags</label>
-            <TagInput
-              selectedIds={form.tagIds}
-              tags={tags}
-              onChange={(tagIds) => setForm((f) => ({ ...f, tagIds }))}
-              onCreateTag={handleCreateTag}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="recorrente"
-              checked={form.recorrente}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, recorrente: e.target.checked }))
-              }
-              className="rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500"
-            />
-            <label htmlFor="recorrente" className="text-sm text-slate-400">
-              Gastos recorrentes (assinatura, etc.)
-            </label>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 active:opacity-90 cursor-pointer min-h-[44px]"
-            >
-              Salvar
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 active:opacity-90 cursor-pointer min-h-[44px]"
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
+      {showForm && !editingTransaction && (
+        <TransactionForm
+          transacoes={transacoes}
+          onSuccess={closeForm}
+          showCancel
+          onCancel={closeForm}
+        />
       )}
 
       <div className="glass rounded-xl overflow-hidden">
-        {transacoes.length === 0 ? (
+        <div className="p-4 border-b border-slate-700/50 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-slate-400 mr-2">Filtrar por tag:</span>
+          <button
+            type="button"
+            onClick={() => setFilterTagId(null)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+              !filterTagId
+                ? "bg-brand-500/30 text-brand-400 border border-brand-500/50"
+                : "bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700"
+            }`}
+          >
+            Todas
+          </button>
+          {tags.map((tag) => (
+            <button
+              key={tag.id}
+              type="button"
+              onClick={() => setFilterTagId(filterTagId === tag.id ? null : tag.id)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer border ${
+                filterTagId === tag.id
+                  ? "border-current"
+                  : "border-slate-700 hover:text-slate-200"
+              }`}
+              style={
+                filterTagId === tag.id
+                  ? {
+                      backgroundColor: `${tag.cor}25`,
+                      color: tag.cor,
+                      borderColor: `${tag.cor}60`,
+                    }
+                  : {
+                      backgroundColor: "rgb(30 41 59 / 0.5)",
+                      color: "rgb(148 163 184)",
+                    }
+              }
+            >
+              {tag.nome}
+            </button>
+          ))}
+        </div>
+        {transacoesFiltradas.length === 0 ? (
           <div className="p-12 text-center text-slate-500">
-            Nenhuma transação ainda. Clique em &quot;Nova&quot; para começar.
+            {filterTagId
+              ? "Nenhuma transação com esta tag."
+              : "Nenhuma transação ainda. Clique em \"Nova\" para começar."}
           </div>
         ) : (
+          <>
           <ul className="divide-y divide-slate-700/50">
-            {transacoes.map((t) => {
+            {transacoesFiltradas.map((t) => {
+              const isEditing = editingTransaction?.id === t.id;
+              if (isEditing) {
+                return (
+                  <li key={t.id} className="p-4">
+                    <TransactionForm
+                      transaction={t}
+                      transacoes={transacoes}
+                      onSuccess={closeForm}
+                      showCancel
+                      onCancel={closeForm}
+                    />
+                  </li>
+                );
+              }
               const transacaoTags = tags.filter((tg) => t.tagIds.includes(tg.id));
+              const isExpanded = expandedId === t.id;
+              const temComentario = !!t.comentario?.trim();
               return (
                 <li
                   key={t.id}
-                  className="flex items-center justify-between gap-4 p-4 hover:bg-slate-800/30 transition-colors"
+                  className={`transition-colors ${
+                    temComentario ? "cursor-pointer" : ""
+                  }`}
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-200 truncate">
-                      {t.descricao}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-xs text-slate-500">
-                        {formatDate(t.data)} • {t.conta}
+                  <div
+                    role={temComentario ? "button" : undefined}
+                    tabIndex={temComentario ? 0 : undefined}
+                    onClick={() =>
+                      temComentario &&
+                      setExpandedId(isExpanded ? null : t.id)
+                    }
+                    onKeyDown={(e) =>
+                      temComentario &&
+                      (e.key === "Enter" || e.key === " ") &&
+                      (e.preventDefault(), setExpandedId(isExpanded ? null : t.id))
+                    }
+                    className="flex items-center justify-between gap-4 p-4 hover:bg-slate-800/30"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="min-w-0">
+                        <p className="font-medium text-slate-200 truncate">
+                          {t.descricao}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className="text-xs text-slate-500">
+                            {formatDate(t.data)} • {t.conta}
+                          </span>
+                          {transacaoTags.map((tg) => (
+                            <span
+                              key={tg.id}
+                              className="text-xs px-2 py-0.5 rounded-full"
+                              style={{
+                                backgroundColor: `${tg.cor}25`,
+                                color: tg.cor,
+                              }}
+                            >
+                              {tg.nome}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      className="flex items-center gap-2 shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span
+                        className={`font-semibold ${
+                          t.valor >= 0 ? "text-brand-400" : "text-red-400"
+                        }`}
+                      >
+                        {formatBRL(t.valor)}
                       </span>
-                      {transacaoTags.map((tg) => (
-                        <span
-                          key={tg.id}
-                          className="text-xs px-2 py-0.5 rounded-full"
-                          style={{
-                            backgroundColor: `${tg.cor}25`,
-                            color: tg.cor,
-                          }}
-                        >
-                          {tg.nome}
-                        </span>
-                      ))}
+                      <button
+                        type="button"
+                        onClick={() => openEditForm(t)}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-brand-400 hover:bg-brand-500/10 transition-colors cursor-pointer"
+                        title="Editar"
+                      >
+                        <Pencil size={18} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(t.id)}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                        title="Excluir"
+                      >
+                        <Trash2 size={18} />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`font-semibold ${
-                        t.valor >= 0 ? "text-brand-400" : "text-red-400"
-                      }`}
-                    >
-                      {formatBRL(t.valor)}
-                    </span>
-                    <button
-                      onClick={() => handleDelete(t.id)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      title="Excluir"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
+                  {isExpanded && t.comentario?.trim() && (
+                    <div className="px-4 pb-4 pt-0">
+                      <p className="text-sm text-slate-400 bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                        {t.comentario}
+                      </p>
+                    </div>
+                  )}
                 </li>
               );
             })}
           </ul>
+          {filterTagId && (
+            <div className="p-4 border-t border-slate-700/50 flex justify-between items-center bg-slate-800/30">
+              <span className="font-medium text-slate-300">
+                Total ({transacoesFiltradas.length} transações)
+              </span>
+              <span
+                className={`font-bold text-lg ${
+                  totalFiltrado >= 0 ? "text-brand-400" : "text-red-400"
+                }`}
+              >
+                {formatBRL(totalFiltrado)}
+              </span>
+            </div>
+          )}
+          </>
         )}
       </div>
     </div>

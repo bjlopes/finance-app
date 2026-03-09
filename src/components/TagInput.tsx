@@ -53,7 +53,7 @@ export function TagInput({
       const newTag = await onCreateTag(inputTrimmed);
       addTag(newTag);
     } catch {
-      // erro silencioso - onCreateTag pode mostrar feedback
+      alert("Erro ao criar tag. Tente novamente.");
     } finally {
       setCreating(false);
     }

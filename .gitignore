@@ -27,3 +27,6 @@ yarn-error.log*
 
 # data (opcional - remova se quiser versionar)
 /data
+
+# accidental duplicates
+package-lock 2.json

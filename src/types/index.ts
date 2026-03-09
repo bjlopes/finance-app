@@ -13,6 +13,7 @@ export interface Transacao {
   conta: string;
   tagIds: string[];
   recorrente?: boolean;
+  comentario?: string;
 }
 
 export interface Conta {

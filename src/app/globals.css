@@ -17,6 +17,8 @@ body {
   min-height: 100vh;
   /* Safe area para iPhone notch e home indicator */
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  /* Melhora interação em touch devices */
+  touch-action: manipulation;
 }
 
 @layer utilities {

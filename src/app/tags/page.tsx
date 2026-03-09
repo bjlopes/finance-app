@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus, Trash2, Pencil } from "lucide-react";
+import { useData } from "@/context/DataContext";
 import type { Tag } from "@/types";
 
 const TIPOS: Tag["tipo"][] = [
@@ -25,8 +26,8 @@ const CORES = [
 ];
 
 export default function TagsPage() {
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { tags, loading, saveTag, deleteTag } = useData();
+
   const [showForm, setShowForm] = useState(false);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
   const [form, setForm] = useState({
@@ -34,15 +35,6 @@ export default function TagsPage() {
     tipo: "contexto" as Tag["tipo"],
     cor: "#6b7280",
   });
-
-  const load = () => {
-    fetch("/api/tags")
-      .then((r) => r.json())
-      .then(setTags)
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => load(), []);
 
   const openNewForm = () => {
     setEditingTag(null);
@@ -61,37 +53,25 @@ export default function TagsPage() {
     const nome = form.nome.toLowerCase().trim();
     if (!nome) return;
 
-    const body = editingTag
-      ? { id: editingTag.id, nome, tipo: form.tipo, cor: form.cor }
-      : { nome, tipo: form.tipo, cor: form.cor };
+    const tag: Tag = editingTag
+      ? { ...editingTag, nome, tipo: form.tipo, cor: form.cor }
+      : {
+          id: crypto.randomUUID(),
+          nome,
+          tipo: form.tipo,
+          cor: form.cor,
+        };
 
-    fetch("/api/tags", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error("Erro");
-        return r.json();
-      })
-      .then(() => {
-        setForm({ nome: "", tipo: "contexto", cor: "#6b7280" });
-        setShowForm(false);
-        setEditingTag(null);
-        load();
-      })
-      .catch(() => alert("Erro ao salvar. Tente novamente."));
+    saveTag(tag);
+    setForm({ nome: "", tipo: "contexto", cor: "#6b7280" });
+    setShowForm(false);
+    setEditingTag(null);
   };
 
   const handleDelete = (id: string) => {
     if (!confirm("Excluir esta tag? Transações que a usam ficarão sem ela."))
       return;
-    fetch(`/api/tags?id=${id}`, { method: "DELETE" })
-      .then((r) => {
-        if (!r.ok) throw new Error("Erro");
-        load();
-      })
-      .catch(() => alert("Erro ao excluir."));
+    deleteTag(id);
   };
 
   if (loading) {
