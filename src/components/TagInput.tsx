@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { Plus } from "lucide-react";
 import type { Tag } from "@/types";
 
 interface TagInputProps {
   selectedIds: string[];
   tags: Tag[];
   onChange: (tagIds: string[]) => void;
+  onCreateTag?: (nome: string) => Promise<Tag>;
   placeholder?: string;
 }
 
@@ -14,15 +16,21 @@ export function TagInput({
   selectedIds,
   tags,
   onChange,
+  onCreateTag,
   placeholder = "Adicionar tags...",
 }: TagInputProps) {
   const [input, setInput] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [creating, setCreating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const inputTrimmed = input.toLowerCase().trim();
+  const tagExists = tags.some((t) => t.nome === inputTrimmed);
+  const canCreate = onCreateTag && inputTrimmed.length >= 2 && !tagExists;
 
   const filteredTags = tags.filter(
     (t) =>
-      t.nome.includes(input.toLowerCase()) &&
+      t.nome.includes(inputTrimmed) &&
       !selectedIds.includes(t.id)
   );
 
@@ -36,6 +44,19 @@ export function TagInput({
 
   const removeTag = (id: string) => {
     onChange(selectedIds.filter((tid) => tid !== id));
+  };
+
+  const handleCreateTag = async () => {
+    if (!canCreate || !onCreateTag) return;
+    setCreating(true);
+    try {
+      const newTag = await onCreateTag(inputTrimmed);
+      addTag(newTag);
+    } catch {
+      // erro silencioso - onCreateTag pode mostrar feedback
+    } finally {
+      setCreating(false);
+    }
   };
 
   useEffect(() => {
@@ -64,8 +85,11 @@ export function TagInput({
             {tag.nome}
             <button
               type="button"
-              onClick={() => removeTag(tag.id)}
-              className="hover:opacity-80 ml-0.5"
+              onClick={(e) => {
+                e.preventDefault();
+                removeTag(tag.id);
+              }}
+              className="hover:opacity-80 ml-0.5 cursor-pointer"
             >
               ×
             </button>
@@ -79,29 +103,54 @@ export function TagInput({
             setShowSuggestions(true);
           }}
           onFocus={() => setShowSuggestions(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && canCreate) {
+              e.preventDefault();
+              handleCreateTag();
+            }
+          }}
           placeholder={selectedTags.length === 0 ? placeholder : ""}
           className="flex-1 min-w-[120px] bg-transparent outline-none text-sm"
         />
       </div>
-      {showSuggestions && (input || filteredTags.length > 0) && (
-        <div className="absolute top-full left-0 right-0 mt-1 py-1 rounded-lg bg-slate-800 border border-slate-700 shadow-xl z-10 max-h-48 overflow-y-auto">
+      {showSuggestions && (inputTrimmed || filteredTags.length > 0 || canCreate) && (
+        <div className="absolute top-full left-0 right-0 mt-1 py-1 rounded-lg bg-slate-800 border border-slate-700 shadow-xl z-20 max-h-48 overflow-y-auto">
           {filteredTags.slice(0, 8).map((tag) => (
             <button
               key={tag.id}
               type="button"
-              onClick={() => addTag(tag)}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-slate-700/50 flex items-center gap-2"
+              onClick={(e) => {
+                e.preventDefault();
+                addTag(tag);
+              }}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-slate-700/50 flex items-center gap-2 cursor-pointer"
             >
               <span
-                className="w-2 h-2 rounded-full"
+                className="w-2 h-2 rounded-full flex-shrink-0"
                 style={{ backgroundColor: tag.cor }}
               />
               {tag.nome}
             </button>
           ))}
-          {filteredTags.length === 0 && input && (
+          {canCreate && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                handleCreateTag();
+              }}
+              disabled={creating}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-slate-700/50 flex items-center gap-2 cursor-pointer text-brand-400 border-t border-slate-700 mt-1 pt-2"
+            >
+              <Plus size={16} />
+              {creating ? "Criando..." : `Criar "${inputTrimmed}"`}
+            </button>
+          )}
+          {filteredTags.length === 0 && !canCreate && inputTrimmed && (
             <div className="px-3 py-2 text-slate-500 text-sm">
-              Nenhuma tag encontrada
+              {inputTrimmed.length < 2
+                ? "Digite pelo menos 2 caracteres para criar"
+                : "Tag já existe"}
             </div>
           )}
         </div>

@@ -52,7 +52,10 @@ export default function TransacoesPage() {
         recorrente: form.recorrente,
       }),
     })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Erro ao salvar");
+        return r.json();
+      })
       .then(() => {
         setForm({
           descricao: "",
@@ -64,7 +67,20 @@ export default function TransacoesPage() {
         });
         setShowForm(false);
         load();
-      });
+      })
+      .catch(() => alert("Erro ao salvar. Tente novamente."));
+  };
+
+  const handleCreateTag = async (nome: string): Promise<Tag> => {
+    const res = await fetch("/api/tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome, tipo: "contexto", cor: "#6b7280" }),
+    });
+    if (!res.ok) throw new Error("Erro ao criar tag");
+    const newTag = await res.json();
+    setTags((prev) => [...prev, newTag]);
+    return newTag;
   };
 
   const handleDelete = (id: string) => {
@@ -100,8 +116,9 @@ export default function TransacoesPage() {
           <p className="text-slate-400 mt-1">Gerencie entradas e saídas</p>
         </div>
         <button
+          type="button"
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 active:opacity-90 transition-colors cursor-pointer min-h-[44px]"
         >
           <Plus size={20} />
           Nova
@@ -181,6 +198,7 @@ export default function TransacoesPage() {
               selectedIds={form.tagIds}
               tags={tags}
               onChange={(tagIds) => setForm((f) => ({ ...f, tagIds }))}
+              onCreateTag={handleCreateTag}
             />
           </div>
           <div className="flex items-center gap-2">
@@ -200,14 +218,14 @@ export default function TransacoesPage() {
           <div className="flex gap-2">
             <button
               type="submit"
-              className="px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600"
+              className="px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 active:opacity-90 cursor-pointer min-h-[44px]"
             >
               Salvar
             </button>
             <button
               type="button"
               onClick={() => setShowForm(false)}
-              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600"
+              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 active:opacity-90 cursor-pointer min-h-[44px]"
             >
               Cancelar
             </button>

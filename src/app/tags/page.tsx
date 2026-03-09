@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil } from "lucide-react";
 import type { Tag } from "@/types";
 
 const TIPOS: Tag["tipo"][] = [
@@ -28,6 +28,7 @@ export default function TagsPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingTag, setEditingTag] = useState<Tag | null>(null);
   const [form, setForm] = useState({
     nome: "",
     tipo: "contexto" as Tag["tipo"],
@@ -43,32 +44,54 @@ export default function TagsPage() {
 
   useEffect(() => load(), []);
 
+  const openNewForm = () => {
+    setEditingTag(null);
+    setForm({ nome: "", tipo: "contexto", cor: "#6b7280" });
+    setShowForm(true);
+  };
+
+  const openEditForm = (tag: Tag) => {
+    setEditingTag(tag);
+    setForm({ nome: tag.nome, tipo: tag.tipo, cor: tag.cor });
+    setShowForm(true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const nome = form.nome.toLowerCase().trim();
     if (!nome) return;
 
+    const body = editingTag
+      ? { id: editingTag.id, nome, tipo: form.tipo, cor: form.cor }
+      : { nome, tipo: form.tipo, cor: form.cor };
+
     fetch("/api/tags", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        nome,
-        tipo: form.tipo,
-        cor: form.cor,
-      }),
+      body: JSON.stringify(body),
     })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Erro");
+        return r.json();
+      })
       .then(() => {
         setForm({ nome: "", tipo: "contexto", cor: "#6b7280" });
         setShowForm(false);
+        setEditingTag(null);
         load();
-      });
+      })
+      .catch(() => alert("Erro ao salvar. Tente novamente."));
   };
 
   const handleDelete = (id: string) => {
     if (!confirm("Excluir esta tag? Transações que a usam ficarão sem ela."))
       return;
-    fetch(`/api/tags?id=${id}`, { method: "DELETE" }).then(load);
+    fetch(`/api/tags?id=${id}`, { method: "DELETE" })
+      .then((r) => {
+        if (!r.ok) throw new Error("Erro");
+        load();
+      })
+      .catch(() => alert("Erro ao excluir."));
   };
 
   if (loading) {
@@ -85,12 +108,13 @@ export default function TagsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-100">Tags</h1>
           <p className="text-slate-400 mt-1">
-            Organize transações com tags flexíveis
+            Gerencie e edite suas tags
           </p>
         </div>
         <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 transition-colors"
+          type="button"
+          onClick={openNewForm}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 active:opacity-90 transition-colors cursor-pointer min-h-[44px]"
         >
           <Plus size={20} />
           Nova tag
@@ -102,7 +126,9 @@ export default function TagsPage() {
           onSubmit={handleSubmit}
           className="glass rounded-xl p-6 space-y-4"
         >
-          <h2 className="text-lg font-semibold text-slate-200">Nova tag</h2>
+          <h2 className="text-lg font-semibold text-slate-200">
+            {editingTag ? "Editar tag" : "Nova tag"}
+          </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-slate-400 mb-1">Nome</label>
@@ -145,7 +171,7 @@ export default function TagsPage() {
                   key={c}
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, cor: c }))}
-                  className={`w-8 h-8 rounded-full transition-transform ${
+                  className={`w-8 h-8 rounded-full transition-transform cursor-pointer ${
                     form.cor === c ? "ring-2 ring-white ring-offset-2 ring-offset-slate-900 scale-110" : ""
                   }`}
                   style={{ backgroundColor: c }}
@@ -156,14 +182,17 @@ export default function TagsPage() {
           <div className="flex gap-2">
             <button
               type="submit"
-              className="px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600"
+              className="px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 active:opacity-90 cursor-pointer min-h-[44px]"
             >
-              Criar
+              {editingTag ? "Salvar" : "Criar"}
             </button>
             <button
               type="button"
-              onClick={() => setShowForm(false)}
-              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600"
+              onClick={() => {
+                setShowForm(false);
+                setEditingTag(null);
+              }}
+              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 active:opacity-90 cursor-pointer min-h-[44px]"
             >
               Cancelar
             </button>
@@ -182,14 +211,23 @@ export default function TagsPage() {
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700"
             >
               <span
-                className="w-3 h-3 rounded-full"
+                className="w-3 h-3 rounded-full flex-shrink-0"
                 style={{ backgroundColor: tag.cor }}
               />
               <span className="text-slate-200 capitalize">{tag.nome}</span>
               <span className="text-xs text-slate-500">({tag.tipo})</span>
               <button
+                type="button"
+                onClick={() => openEditForm(tag)}
+                className="p-1.5 rounded text-slate-500 hover:text-brand-400 hover:bg-brand-500/10 transition-colors cursor-pointer"
+                title="Editar"
+              >
+                <Pencil size={14} />
+              </button>
+              <button
+                type="button"
                 onClick={() => handleDelete(tag.id)}
-                className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors ml-1"
+                className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                 title="Excluir"
               >
                 <Trash2 size={14} />
