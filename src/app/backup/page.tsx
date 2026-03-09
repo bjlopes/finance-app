@@ -7,7 +7,7 @@ import { useData } from "@/context/DataContext";
 import * as store from "@/lib/store";
 
 export default function BackupPage() {
-  const { load } = useData();
+  const { load, importAndSync } = useData();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleExport = () => {
@@ -28,7 +28,12 @@ export default function BackupPage() {
       const text = await file.text();
       const result = store.importBackup(text);
       if (result.ok) {
-        load();
+        const data = {
+          transacoes: store.getTransacoes(),
+          tags: store.getTags(),
+          contas: store.getContas(),
+        };
+        await importAndSync(data);
         alert("Backup restaurado com sucesso!");
       } else {
         alert(result.error ?? "Erro ao importar");

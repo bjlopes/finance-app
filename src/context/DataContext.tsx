@@ -30,6 +30,7 @@ interface DataContextValue {
   contas: ContaItem[];
   loading: boolean;
   load: () => void;
+  importAndSync: (data: UserData) => Promise<void>;
   saveTransacao: (t: Transacao) => void;
   deleteTransacao: (id: string) => void;
   saveTag: (t: Tag) => Tag;
@@ -224,6 +225,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [persistToRemote]
   );
 
+  const importAndSync = useCallback(
+    async (data: UserData) => {
+      store.setFullData(data);
+      setTransacoes(data.transacoes);
+      setTags(data.tags);
+      setContas(data.contas);
+      await persistToRemote(data);
+      store.saveAutoBackup();
+    },
+    [persistToRemote]
+  );
+
   const loadSampleData = useCallback(() => {
     store.loadSampleData();
     const t = store.getTransacoes();
@@ -242,6 +255,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       contas,
       loading,
       load,
+      importAndSync,
       saveTransacao,
       deleteTransacao,
       saveTag,
@@ -257,6 +271,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       contas,
       loading,
       load,
+      importAndSync,
       saveTransacao,
       deleteTransacao,
       saveTag,
