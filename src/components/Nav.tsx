@@ -22,8 +22,8 @@ export function Nav() {
 
   return (
     <nav className="sticky top-0 z-50 glass border-b border-slate-700/50">
-      <div className="max-w-4xl mx-auto px-4 py-3">
-        <div className="flex items-center justify-between gap-2">
+      <div className="max-w-4xl mx-auto px-4 py-3 overflow-x-auto">
+        <div className="flex items-center justify-between gap-2 min-w-0">
           <div className="flex items-center gap-1 min-w-0">
             <span className="text-brand-500 font-bold text-lg mr-4 shrink-0">
               Finanças
@@ -51,39 +51,37 @@ export function Nav() {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {isConfigured && (
-              user ? (
-                <>
-                  <span className="text-xs text-slate-500 truncate max-w-[120px]" title={user.email}>
-                    {user.email}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => signOut()}
-                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 text-sm"
-                    title="Sair"
-                  >
-                    <LogOut size={16} />
-                    Sair
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link
-                    href="/signup"
-                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 text-sm"
-                  >
-                    Criar conta
-                  </Link>
-                  <Link
-                    href="/login"
-                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-brand-500/20 text-brand-400 hover:bg-brand-500/30 text-sm"
-                  >
-                    <LogIn size={16} />
-                    Entrar
-                  </Link>
-                </>
-              )
+            {user ? (
+              <>
+                <span className="text-xs text-slate-500 truncate max-w-[100px] sm:max-w-[120px]" title={user.email}>
+                  {user.email}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => signOut()}
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 text-sm"
+                  title="Sair"
+                >
+                  <LogOut size={16} />
+                  <span className="hidden sm:inline">Sair</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/signup"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 text-sm shrink-0"
+                >
+                  Criar conta
+                </Link>
+                <Link
+                  href="/login"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-brand-500/20 text-brand-400 hover:bg-brand-500/30 text-sm font-medium shrink-0"
+                >
+                  <LogIn size={16} />
+                  Entrar
+                </Link>
+              </>
             )}
           </div>
         </div>
