@@ -4,34 +4,27 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 
-const DEFAULT_EMAIL = "bjlopes@icloud.com";
-
 export default function LoginPage() {
-  const { signInWithEmail, isConfigured } = useAuth();
-  const [email, setEmail] = useState(DEFAULT_EMAIL);
+  const { signInWithPassword, isConfigured } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    setSent(false);
-    const { error } = await signInWithEmail(email);
+    const { error } = await signInWithPassword(email, password);
     setLoading(false);
-    if (error) {
-      setError(error);
-    } else {
-      setSent(true);
-    }
+    if (error) setError(error);
   };
 
   if (!isConfigured) {
     return (
       <div className="max-w-md mx-auto space-y-6">
         <h1 className="text-2xl font-bold text-slate-100">Entrar</h1>
-        <div className="glass rounded-xl p-6 text-slate-400">
+        <div className="glass rounded-xl p-6 space-y-4 text-slate-400">
           <p className="mb-4">
             O armazenamento em nuvem não está configurado. Configure as variáveis
             de ambiente do Supabase para habilitar login e sincronização.
@@ -44,35 +37,6 @@ export default function LoginPage() {
         </div>
         <p className="text-center">
           <Link href="/" className="text-brand-400 hover:underline">
-            Voltar ao início
-          </Link>
-        </p>
-      </div>
-    );
-  }
-
-  if (sent) {
-    return (
-      <div className="max-w-md mx-auto space-y-6">
-        <h1 className="text-2xl font-bold text-slate-100">Verifique seu e-mail</h1>
-        <div className="glass rounded-xl p-6 space-y-4">
-          <p className="text-slate-300">
-            Enviamos um link de acesso para <strong>{email}</strong>.
-          </p>
-          <p className="text-slate-400 text-sm">
-            Clique no link recebido para entrar. Se não aparecer na caixa de
-            entrada, verifique a pasta de spam.
-          </p>
-          <button
-            type="button"
-            onClick={() => setSent(false)}
-            className="text-brand-400 hover:underline text-sm"
-          >
-            Usar outro e-mail
-          </button>
-        </div>
-        <p className="text-center">
-          <Link href="/" className="text-slate-500 hover:text-slate-400 text-sm">
             Voltar ao início
           </Link>
         </p>
@@ -100,20 +64,37 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             required
             placeholder="seu@email.com"
+            autoComplete="email"
             className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
           />
-          <p className="text-xs text-slate-500 mt-1">
-            Enviaremos um link de acesso para seu e-mail (sem senha).
-          </p>
+        </div>
+        <div>
+          <label className="block text-sm text-slate-400 mb-1">Senha</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            placeholder="••••••••"
+            autoComplete="current-password"
+            minLength={6}
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+          />
         </div>
         <button
           type="submit"
           disabled={loading}
           className="w-full px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 disabled:opacity-50 cursor-pointer"
         >
-          {loading ? "Enviando link..." : "Enviar link de acesso"}
+          {loading ? "Entrando..." : "Entrar"}
         </button>
       </form>
+      <p className="text-center text-sm text-slate-500">
+        Não tem conta?{" "}
+        <Link href="/signup" className="text-brand-400 hover:underline">
+          Criar conta
+        </Link>
+      </p>
       <p className="text-center">
         <Link href="/" className="text-slate-500 hover:text-slate-400 text-sm">
           Voltar ao início

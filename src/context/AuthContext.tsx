@@ -14,7 +14,8 @@ import { clearLocalData } from "@/lib/store";
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  signInWithEmail: (email: string) => Promise<{ error: string | null }>;
+  signInWithPassword: (email: string, password: string) => Promise<{ error: string | null }>;
+  signUpWithPassword: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   isConfigured: boolean;
 }
@@ -42,16 +43,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithEmail = useCallback(
-    async (email: string) => {
+  const signInWithPassword = useCallback(
+    async (email: string, password: string) => {
       if (!supabase) return { error: "Serviço não configurado" };
-      const redirectTo =
-        typeof window !== "undefined"
-          ? `${window.location.origin}/auth/callback`
-          : undefined;
-      const { error } = await supabase.auth.signInWithOtp({
+      const { error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
-        options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+        password,
+      });
+      return { error: error?.message ?? null };
+    },
+    []
+  );
+
+  const signUpWithPassword = useCallback(
+    async (email: string, password: string) => {
+      if (!supabase) return { error: "Serviço não configurado" };
+      const { error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: { emailRedirectTo: `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback` },
       });
       return { error: error?.message ?? null };
     },
@@ -66,7 +76,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = {
     user,
     loading,
-    signInWithEmail,
+    signInWithPassword,
+    signUpWithPassword,
     signOut,
     isConfigured: isSupabaseConfigured(),
   };
