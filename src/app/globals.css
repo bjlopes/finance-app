@@ -44,8 +44,6 @@ body {
 }
 
 /* Evita zoom no iOS ao focar em inputs (font-size >= 16px) */
-@supports (padding: env(safe-area-inset-top)) {
-  input, select, textarea {
-    font-size: 16px;
-  }
+input, select, textarea {
+  font-size: 16px;
 }

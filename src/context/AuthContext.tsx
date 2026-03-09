@@ -48,10 +48,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithPassword = useCallback(
     async (email: string, password: string) => {
       if (!supabase) return { error: "Serviço não configurado" };
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
+      if (!error && data?.session) {
+        setUser(data.session.user);
+      }
       return { error: error?.message ?? null };
     },
     []
@@ -60,11 +63,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUpWithPassword = useCallback(
     async (email: string, password: string) => {
       if (!supabase) return { error: "Serviço não configurado" };
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
         options: { emailRedirectTo: `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback` },
       });
+      if (!error && data?.session) {
+        setUser(data.session.user);
+      }
       return { error: error?.message ?? null };
     },
     []

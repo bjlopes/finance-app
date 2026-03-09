@@ -19,6 +19,7 @@ export default function UpdatePasswordPage() {
     const hasAuthParams =
       typeof window !== "undefined" &&
       (window.location.hash?.includes("access_token") ||
+        window.location.hash?.includes("type=recovery") ||
         window.location.search?.includes("code="));
     if (!user && !hasAuthParams) {
       router.replace("/auth/forgot-password");
@@ -43,7 +44,7 @@ export default function UpdatePasswordPage() {
       setError(error);
     } else {
       setSuccess(true);
-      setTimeout(() => router.replace("/"), 1500);
+      setTimeout(() => { window.location.href = "/"; }, 1500);
     }
   };
 
@@ -112,7 +113,7 @@ export default function UpdatePasswordPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 disabled:opacity-50 cursor-pointer"
+          className="w-full min-h-[48px] px-4 py-3 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 disabled:opacity-50 cursor-pointer"
         >
           {loading ? "Salvando..." : "Salvar senha"}
         </button>

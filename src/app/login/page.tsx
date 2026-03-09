@@ -1,17 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
+const REMEMBER_EMAIL_KEY = "finance-app-remember-email";
+
 export default function LoginPage() {
-  const router = useRouter();
   const { signInWithPassword, isConfigured } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem(REMEMBER_EMAIL_KEY);
+      if (saved) {
+        setEmail(saved);
+        setRemember(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +36,17 @@ export default function LoginPage() {
     if (error) {
       setError(error);
     } else {
-      router.replace("/");
+      try {
+        if (remember) {
+          localStorage.setItem(REMEMBER_EMAIL_KEY, email.trim().toLowerCase());
+        } else {
+          localStorage.removeItem(REMEMBER_EMAIL_KEY);
+        }
+      } catch {
+        // ignore
+      }
+      await new Promise((r) => setTimeout(r, 100));
+      window.location.href = "/";
     }
   };
 
@@ -87,10 +111,19 @@ export default function LoginPage() {
             className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
           />
         </div>
+        <label className="flex items-center gap-3 cursor-pointer select-none min-h-[44px] py-1">
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+            className="rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500/50 w-5 h-5 shrink-0 mt-0.5"
+          />
+          <span className="text-sm text-slate-400">Lembrar e-mail</span>
+        </label>
         <button
           type="submit"
           disabled={loading}
-          className="w-full px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 disabled:opacity-50 cursor-pointer"
+          className="w-full min-h-[48px] px-4 py-3 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 disabled:opacity-50 cursor-pointer touch-target"
         >
           {loading ? "Entrando..." : "Entrar"}
         </button>

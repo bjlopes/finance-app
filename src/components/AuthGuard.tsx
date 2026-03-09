@@ -19,7 +19,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const isAuthPage =
     pathname === "/login" ||
     pathname === "/signup" ||
-    pathname === "/auth/callback";
+    pathname === "/auth/callback" ||
+    pathname === "/auth/forgot-password" ||
+    pathname === "/auth/update-password";
 
   if (isConfigured && !user && !isAuthPage) {
     return (

@@ -64,10 +64,11 @@ export function Nav() {
                   <button
                     type="button"
                     onClick={() => signOut()}
-                    className="flex items-center justify-center gap-1.5 min-h-[44px] min-w-[44px] px-2 py-2 rounded-lg text-slate-400 hover:text-slate-200 active:bg-slate-800/50 text-sm"
-                    title="Sair"
+                    className="flex items-center justify-center gap-1.5 min-h-[44px] px-3 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 active:bg-slate-800/70 text-sm border border-slate-600/50"
+                    title="Sair da conta"
                   >
-                    <LogOut size={18} />
+                    <LogOut size={18} className="shrink-0" />
+                    <span>Sair</span>
                   </button>
                 </>
               ) : (
@@ -140,6 +141,18 @@ export function Nav() {
                 </li>
               );
             })}
+            {user && (
+              <li className="pt-2 mt-2 border-t border-slate-700/50">
+                <button
+                  type="button"
+                  onClick={() => { closeMenu(); signOut(); }}
+                  className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-base font-medium text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 active:bg-slate-800 min-h-[48px]"
+                >
+                  <LogOut size={22} className="shrink-0" />
+                  Sair da conta
+                </button>
+              </li>
+            )}
           </ul>
         </nav>
       </div>
