@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0a0f1a;
+  --bg-card: #111827;
+  --accent: #22c55e;
+  --accent-dim: #16a34a;
+  --text: #f9fafb;
+  --text-muted: #9ca3af;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  /* Safe area para iPhone notch e home indicator */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-slate-900/50 backdrop-blur-sm border border-slate-700/50;
+  }
+}

@@ -1,0 +1,203 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
+import type { Tag } from "@/types";
+
+const TIPOS: Tag["tipo"][] = [
+  "contexto",
+  "frequencia",
+  "regra",
+  "projeto",
+  "custom",
+];
+
+const CORES = [
+  "#3b82f6",
+  "#f59e0b",
+  "#8b5cf6",
+  "#ef4444",
+  "#10b981",
+  "#ec4899",
+  "#6b7280",
+  "#22c55e",
+  "#f97316",
+];
+
+export default function TagsPage() {
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    nome: "",
+    tipo: "contexto" as Tag["tipo"],
+    cor: "#6b7280",
+  });
+
+  const load = () => {
+    fetch("/api/tags")
+      .then((r) => r.json())
+      .then(setTags)
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => load(), []);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const nome = form.nome.toLowerCase().trim();
+    if (!nome) return;
+
+    fetch("/api/tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nome,
+        tipo: form.tipo,
+        cor: form.cor,
+      }),
+    })
+      .then((r) => r.json())
+      .then(() => {
+        setForm({ nome: "", tipo: "contexto", cor: "#6b7280" });
+        setShowForm(false);
+        load();
+      });
+  };
+
+  const handleDelete = (id: string) => {
+    if (!confirm("Excluir esta tag? Transações que a usam ficarão sem ela."))
+      return;
+    fetch(`/api/tags?id=${id}`, { method: "DELETE" }).then(load);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[40vh]">
+        <div className="animate-pulse text-slate-500">Carregando...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-100">Tags</h1>
+          <p className="text-slate-400 mt-1">
+            Organize transações com tags flexíveis
+          </p>
+        </div>
+        <button
+          onClick={() => setShowForm(!showForm)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 transition-colors"
+        >
+          <Plus size={20} />
+          Nova tag
+        </button>
+      </div>
+
+      {showForm && (
+        <form
+          onSubmit={handleSubmit}
+          className="glass rounded-xl p-6 space-y-4"
+        >
+          <h2 className="text-lg font-semibold text-slate-200">Nova tag</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">Nome</label>
+              <input
+                type="text"
+                value={form.nome}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, nome: e.target.value }))
+                }
+                placeholder="Ex: transporte, alimentação"
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">Tipo</label>
+              <select
+                value={form.tipo}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    tipo: e.target.value as Tag["tipo"],
+                  }))
+                }
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              >
+                {TIPOS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm text-slate-400 mb-2">Cor</label>
+            <div className="flex gap-2 flex-wrap">
+              {CORES.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, cor: c }))}
+                  className={`w-8 h-8 rounded-full transition-transform ${
+                    form.cor === c ? "ring-2 ring-white ring-offset-2 ring-offset-slate-900 scale-110" : ""
+                  }`}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600"
+            >
+              Criar
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600"
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div className="glass rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-slate-200 mb-4">
+          Suas tags ({tags.length})
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {tags.map((tag) => (
+            <div
+              key={tag.id}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/50 border border-slate-700"
+            >
+              <span
+                className="w-3 h-3 rounded-full"
+                style={{ backgroundColor: tag.cor }}
+              />
+              <span className="text-slate-200 capitalize">{tag.nome}</span>
+              <span className="text-xs text-slate-500">({tag.tipo})</span>
+              <button
+                onClick={() => handleDelete(tag.id)}
+                className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors ml-1"
+                title="Excluir"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

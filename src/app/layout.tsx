@@ -1,0 +1,52 @@
+import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { Nav } from "@/components/Nav";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-geist-sans" });
+
+export const metadata: Metadata = {
+  title: "Finanças | App com Tags",
+  description: "Controle suas finanças com tags",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Finanças",
+  },
+  formatDetection: {
+    telephone: false,
+    email: false,
+  },
+  icons: {
+    apple: "/icon.svg",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#22c55e",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="pt-BR" className="dark">
+      <body className={`${inter.variable} font-sans antialiased min-h-screen`}>
+        <div className="min-h-screen flex flex-col">
+          <Nav />
+          <main className="flex-1 p-4 md:p-6 max-w-4xl mx-auto w-full">
+            {children}
+          </main>
+        </div>
+      </body>
+    </html>
+  );
+}
