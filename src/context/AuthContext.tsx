@@ -16,6 +16,8 @@ interface AuthContextValue {
   loading: boolean;
   signInWithPassword: (email: string, password: string) => Promise<{ error: string | null }>;
   signUpWithPassword: (email: string, password: string) => Promise<{ error: string | null }>;
+  resetPasswordForEmail: (email: string) => Promise<{ error: string | null }>;
+  updatePassword: (password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   isConfigured: boolean;
 }
@@ -68,6 +70,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const resetPasswordForEmail = useCallback(
+    async (email: string) => {
+      if (!supabase) return { error: "Serviço não configurado" };
+      const redirectTo =
+        typeof window !== "undefined"
+          ? `${window.location.origin}/auth/update-password`
+          : undefined;
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        { redirectTo }
+      );
+      return { error: error?.message ?? null };
+    },
+    []
+  );
+
+  const updatePassword = useCallback(
+    async (password: string) => {
+      if (!supabase) return { error: "Serviço não configurado" };
+      const { error } = await supabase.auth.updateUser({ password });
+      return { error: error?.message ?? null };
+    },
+    []
+  );
+
   const signOut = useCallback(async () => {
     clearLocalData();
     if (supabase) await supabase.auth.signOut();
@@ -78,6 +105,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading,
     signInWithPassword,
     signUpWithPassword,
+    resetPasswordForEmail,
+    updatePassword,
     signOut,
     isConfigured: isSupabaseConfigured(),
   };

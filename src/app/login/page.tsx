@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
 export default function LoginPage() {
+  const router = useRouter();
   const { signInWithPassword, isConfigured } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,7 +19,11 @@ export default function LoginPage() {
     setLoading(true);
     const { error } = await signInWithPassword(email, password);
     setLoading(false);
-    if (error) setError(error);
+    if (error) {
+      setError(error);
+    } else {
+      router.replace("/");
+    }
   };
 
   if (!isConfigured) {
@@ -88,6 +94,14 @@ export default function LoginPage() {
         >
           {loading ? "Entrando..." : "Entrar"}
         </button>
+        <p className="text-center">
+          <Link
+            href="/auth/forgot-password"
+            className="text-sm text-slate-500 hover:text-brand-400"
+          >
+            Esqueci a senha
+          </Link>
+        </p>
       </form>
       <p className="text-center text-sm text-slate-500">
         Não tem conta?{" "}

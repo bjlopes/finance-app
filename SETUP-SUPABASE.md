@@ -86,7 +86,9 @@ Para entrar mais rápido sem confirmar e-mail:
 1. No Supabase, vá em **Authentication** → **URL Configuration**
 2. Em **Redirect URLs**, adicione:
    - `https://SUA-URL.vercel.app/auth/callback`
+   - `https://SUA-URL.vercel.app/auth/update-password`
    - `http://localhost:3000/auth/callback` (para dev)
+   - `http://localhost:3000/auth/update-password` (para dev)
 3. Salve
 
 ---
