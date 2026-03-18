@@ -15,6 +15,7 @@ import {
   buildTagTree,
 } from "@/lib/tags-utils";
 import { formatLocalDate, getLocalDateString } from "@/lib/dateUtils";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import { groupParceladas, isParcelada, filterGruposAtivos, parseParcela } from "@/lib/parcelas-utils";
 import { getDataVencimentoFatura } from "@/lib/fluxoCaixa";
 import type { Transacao } from "@/types";
@@ -35,6 +36,7 @@ export default function TransacoesPage() {
   const [showAll, setShowAll] = useState(false);
   const [filterDataDe, setFilterDataDe] = useState<string>("");
   const [filterDataAte, setFilterDataAte] = useState<string>("");
+  const [filterConta, setFilterConta] = useState<string | null>(null);
   const [expandedParceladaKey, setExpandedParceladaKey] = useState<string | null>(null);
   const [parceladasModalOpen, setParceladasModalOpen] = useState(false);
   const subtagDropdownRef = useRef<HTMLDivElement>(null);
@@ -106,8 +108,11 @@ export default function TransacoesPage() {
     if (filterDataAte) {
       list = list.filter((t) => t.data <= filterDataAte);
     }
+    if (filterConta) {
+      list = list.filter((t) => t.conta === filterConta);
+    }
     return list;
-  }, [transacoes, showAll, filterTagId, tags, includeSubtags, selectedSubtagIds, searchDesc, filterDataDe, filterDataAte]);
+  }, [transacoes, showAll, filterTagId, tags, includeSubtags, selectedSubtagIds, searchDesc, filterDataDe, filterDataAte, filterConta]);
 
   const totalFiltrado = useMemo(
     () => transacoesFiltradas.reduce((s, t) => s + t.valor, 0),
@@ -224,7 +229,8 @@ export default function TransacoesPage() {
       )}
 
       <div className="glass rounded-xl overflow-visible">
-        <div className="p-4 border-b border-slate-700/50 space-y-3">
+        <div className="p-4 tablet:p-5 border-b border-slate-700/50 space-y-3 tablet:space-y-4">
+          <div className="grid grid-cols-1 gap-4 tablet:grid-cols-2 lg:grid-cols-3 space-y-3 tablet:space-y-0">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
             <label className="text-sm text-slate-400 shrink-0">Buscar:</label>
             <input
@@ -235,7 +241,25 @@ export default function TransacoesPage() {
               className="flex-1 min-w-0 min-h-[44px] px-3 py-2 rounded-lg text-sm bg-slate-800 border border-slate-700 text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
             />
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 tablet:flex-row">
+            <label className="text-sm text-slate-400 shrink-0">Filtrar por conta:</label>
+            <select
+              value={filterConta ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFilterConta(v || null);
+              }}
+              className="flex-1 min-w-0 min-h-[44px] px-3 py-2 rounded-lg text-sm font-medium bg-slate-800 border border-slate-700 text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+            >
+              <option value="">Todas</option>
+              {contas.map((c) => (
+                <option key={c.nome} value={c.nome}>
+                  {c.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 tablet:flex-row">
             <label className="text-sm text-slate-400 shrink-0">Filtrar por tag:</label>
             <select
               value={filterTagId ?? ""}
@@ -252,6 +276,7 @@ export default function TransacoesPage() {
                 </option>
               ))}
             </select>
+          </div>
           </div>
           {filterTagId && tagHasSubtags(filterTagId, tags) && (
             <div className="flex flex-wrap items-center gap-2">
@@ -281,8 +306,8 @@ export default function TransacoesPage() {
                   </button>
                   {subtagDropdownOpen && (
                     <>
-                      <div className="fixed inset-0 z-40 md:hidden" onClick={() => setSubtagDropdownOpen(false)} aria-hidden />
-                      <div className="fixed bottom-0 left-0 right-0 z-50 max-h-[60vh] overflow-y-auto py-4 px-4 rounded-t-xl bg-slate-800 border-t border-slate-700 shadow-xl md:absolute md:bottom-auto md:left-0 md:right-auto md:top-full md:mt-1 md:max-h-none md:min-w-[160px] md:py-2 md:px-0 md:rounded-lg md:border md:border-slate-700">
+                      <div className="fixed inset-0 z-40 tablet:hidden" onClick={() => setSubtagDropdownOpen(false)} aria-hidden />
+                      <div className="fixed bottom-0 left-0 right-0 z-50 max-h-[60vh] overflow-y-auto py-4 px-4 rounded-t-xl bg-slate-800 border-t border-slate-700 shadow-xl tablet:absolute tablet:bottom-auto tablet:left-0 tablet:right-auto tablet:top-full tablet:mt-1 tablet:max-h-none tablet:min-w-[160px] tablet:py-2 tablet:px-0 tablet:rounded-lg tablet:border tablet:border-slate-700">
                       {subtagsDaTag.length > 2 && (
                         <button
                           type="button"
@@ -336,24 +361,16 @@ export default function TransacoesPage() {
             </div>
           )}
           {showAll && (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-              <label className="text-sm text-slate-400 shrink-0">Período:</label>
-              <div className="flex gap-2 flex-wrap">
-                <input
-                  type="date"
-                  value={filterDataDe}
-                  onChange={(e) => setFilterDataDe(e.target.value)}
-                  className="min-h-[36px] px-3 py-2 rounded-lg text-sm bg-slate-800 border border-slate-700 text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-                  placeholder="De"
-                />
-                <input
-                  type="date"
-                  value={filterDataAte}
-                  onChange={(e) => setFilterDataAte(e.target.value)}
-                  className="min-h-[36px] px-3 py-2 rounded-lg text-sm bg-slate-800 border border-slate-700 text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-                  placeholder="Até"
-                />
-              </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+              <label className="text-sm text-slate-400 shrink-0 pt-1">Período:</label>
+              <DateRangePicker
+                dataDe={filterDataDe}
+                dataAte={filterDataAte}
+                onChange={(de, ate) => {
+                  setFilterDataDe(de);
+                  setFilterDataAte(ate);
+                }}
+              />
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
@@ -389,7 +406,7 @@ export default function TransacoesPage() {
         </div>
         {transacoesFiltradas.length === 0 ? (
           <div className="p-12 text-center text-slate-500">
-            {filterTagId || searchDesc.trim()
+            {filterTagId || filterConta || searchDesc.trim()
               ? "Nenhuma transação encontrada com os filtros aplicados."
               : "Nenhuma transação ainda. Clique em \"Nova\" para começar."}
           </div>
@@ -504,7 +521,7 @@ export default function TransacoesPage() {
               );
             })}
           </ul>
-          {filterTagId && (
+          {(filterTagId || filterConta || filterDataDe || filterDataAte || searchDesc.trim()) && (
             <div className="p-4 border-t border-slate-700/50 flex justify-between items-center bg-slate-800/30">
               <span className="font-medium text-slate-300">
                 Total ({transacoesFiltradas.length} transações)

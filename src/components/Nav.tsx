@@ -37,14 +37,14 @@ export function Nav() {
   return (
     <>
       <nav className="sticky top-0 z-50 glass border-b border-slate-700/50 pt-[env(safe-area-inset-top)]">
-        <div className="max-w-4xl lg:max-w-5xl mx-auto px-4 lg:px-8 py-3">
+        <div className="max-w-[min(100%,56rem)] tablet:max-w-[min(100%,56rem)] lg:max-w-[min(100%,72rem)] mx-auto px-4 tablet:px-6 lg:px-8 py-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               {showNavLinks && (
                 <button
                   type="button"
                   onClick={() => setMenuOpen(true)}
-                  className="lg:hidden flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg text-slate-400 hover:text-slate-200 active:bg-slate-800/50 transition-colors"
+                  className="tablet:hidden flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg text-slate-400 hover:text-slate-200 active:bg-slate-800/50 transition-colors"
                   aria-label="Abrir menu"
                 >
                   <Menu size={24} />
@@ -52,7 +52,7 @@ export function Nav() {
               )}
               <span className="text-brand-500 font-bold text-lg shrink-0">Finanças</span>
               {showNavLinks && (
-                <ul className="hidden lg:flex items-center gap-1 ml-4">
+                <ul className="hidden tablet:flex items-center gap-1 ml-2 tablet:ml-4 flex-wrap">
                   {links.map(({ href, label, icon: Icon }) => {
                     const isActive =
                       pathname === href ||
@@ -61,7 +61,7 @@ export function Nav() {
                       <li key={href}>
                         <Link
                           href={href}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          className={`flex items-center gap-2 px-2 tablet:px-3 py-2 rounded-lg text-sm font-medium transition-colors shrink-0 ${
                             isActive
                               ? "bg-brand-500/20 text-brand-400"
                               : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
@@ -120,14 +120,14 @@ export function Nav() {
       {/* Menu overlay - só renderiza se há links */}
       {showNavLinks && menuOpen && (
         <div
-          className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm tablet:hidden"
           onClick={closeMenu}
           aria-hidden="true"
         />
       )}
       {showNavLinks && (
       <div
-        className={`fixed top-0 left-0 z-[70] h-full w-[min(280px,85vw)] max-w-[280px] bg-slate-900 border-r border-slate-700/50 shadow-xl transition-transform duration-200 ease-out pt-[env(safe-area-inset-top)] lg:hidden ${
+        className={`fixed top-0 left-0 z-[70] h-full w-[min(280px,85vw)] max-w-[280px] bg-slate-900 border-r border-slate-700/50 shadow-xl transition-transform duration-200 ease-out pt-[env(safe-area-inset-top)] tablet:hidden ${
           menuOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >

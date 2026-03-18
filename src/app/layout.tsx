@@ -45,7 +45,7 @@ export default function RootLayout({
           <DataProvider>
             <div className="min-h-screen flex flex-col">
               <Nav />
-            <main className="flex-1 px-4 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] md:p-6 lg:px-8 lg:py-6 max-w-4xl lg:max-w-5xl mx-auto w-full min-w-0 overflow-x-hidden">
+            <main className="flex-1 w-full min-w-0 overflow-x-hidden px-4 py-5 tablet:px-6 tablet:py-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] max-w-[min(100%,56rem)] tablet:max-w-[min(100%,56rem)] lg:max-w-[min(100%,72rem)] mx-auto">
               <AuthGuard>{children}</AuthGuard>
             </main>
           </div>

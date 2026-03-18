@@ -97,8 +97,8 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Dashboard</h1>
-          <p className="text-slate-400 mt-1">{stats.mesLabel}</p>
+          <h1 className="text-[length:var(--fluid-text-2xl)] font-bold text-slate-100">Dashboard</h1>
+          <p className="text-[length:var(--fluid-text-sm)] text-slate-400 mt-1">{stats.mesLabel}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -126,10 +126,10 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="glass rounded-xl p-5">
-        <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:items-start space-y-6 lg:space-y-0">
-          {/* Coluna esquerda: Fluxo do mês */}
-          <div className="space-y-6 lg:pr-4 lg:border-r lg:border-slate-700/50">
+      <div className="glass rounded-xl p-5 tablet:p-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr,auto] lg:items-start lg:gap-8">
+          {/* Coluna esquerda: Fluxo + Gastos por tag + conta + maiores (uma coluna só no iPad landscape) */}
+          <div className="space-y-6 lg:pr-6 lg:border-r lg:border-slate-700/50 lg:min-w-0">
             <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-700/50 pb-3">
               Fluxo do mês
             </h2>
@@ -182,17 +182,101 @@ export default function DashboardPage() {
               </span>
               <span>{stats.qtdTransacoesMes} transações</span>
             </div>
+
+            {stats.tagHierarchy.length > 0 && (
+              <div className="pt-2 border-t border-slate-700/50">
+                <h3 className="flex items-center gap-2 text-slate-300 font-medium mb-3">
+                  <Tag size={16} />
+                  Gastos por tag
+                </h3>
+                <div className="mb-4 lg:hidden">
+                  <DonutChart
+                    data={stats.tagHierarchy.map((n) => ({
+                      label: n.tag.nome,
+                      value: n.total,
+                      color: n.tag.cor || "#6366f1",
+                    }))}
+                    total={stats.totalGastosMes}
+                    formatValue={formatBRL}
+                  />
+                </div>
+                <GastosPorTagHierarquico
+                  nodes={stats.tagHierarchy}
+                  totalGastos={stats.totalGastosMes}
+                  formatBRL={formatBRL}
+                  gastos={stats.gastos}
+                  tags={tags}
+                />
+              </div>
+            )}
+
+            {stats.topContas.length > 0 && (
+              <div className="pt-2 border-t border-slate-700/50">
+                <h3 className="text-slate-300 font-medium mb-3">Gastos por conta</h3>
+                <ul className="space-y-2">
+                  {stats.topContas.map(([conta, valor]) => (
+                    <li
+                      key={conta}
+                      className="flex justify-between text-sm text-slate-400"
+                    >
+                      <span>{conta}</span>
+                      <span className="text-slate-200 font-medium">
+                        {formatBRL(valor)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {stats.maioresGastos.length > 0 && (
+              <div className="pt-2 border-t border-slate-700/50">
+                <h3 className="text-slate-300 font-medium mb-3">
+                  Maiores gastos do mês
+                </h3>
+                <ul className="space-y-2">
+                  {stats.maioresGastos.map((t) => (
+                    <li
+                      key={t.id}
+                      className="flex justify-between items-center gap-2 text-sm"
+                    >
+                      <span className="text-slate-300 truncate">{t.descricao}</span>
+                      <span className="text-red-400 font-medium shrink-0">
+                        {formatBRL(Math.abs(t.valor))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {stats.tagHierarchy.length === 0 &&
+              stats.topContas.length === 0 &&
+              stats.maioresGastos.length === 0 && (
+                <div className="pt-2 border-t border-slate-700/50 space-y-2">
+                  <p className="text-slate-500 text-sm">
+                    Nenhum gasto neste mês.{" "}
+                    <Link href="/" className="text-brand-500 hover:underline">
+                      Adicione uma transação
+                    </Link>
+                  </p>
+                  {stats.totalTransacoes === 0 && (
+                    <button
+                      type="button"
+                      onClick={loadSampleData}
+                      className="text-sm text-brand-400 hover:text-brand-300 underline cursor-pointer"
+                    >
+                      Carregar dados de exemplo
+                    </button>
+                  )}
+                </div>
+              )}
           </div>
 
-          {/* Coluna direita: Gastos por tag, conta, maiores */}
-          <div className="space-y-6 lg:pl-4">
-        {stats.tagHierarchy.length > 0 && (
-          <div className="pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-700/50">
-            <h3 className="flex items-center gap-2 text-slate-300 font-medium mb-3">
-              <Tag size={16} />
-              Gastos por tag
-            </h3>
-            <div className="mb-4">
+          {/* Coluna direita (somente lg/iPad landscape): Gráfico */}
+          {stats.tagHierarchy.length > 0 && (
+            <div className="hidden lg:block lg:shrink-0 lg:pl-6">
+              <h3 className="text-slate-300 font-medium mb-3 lg:sr-only">Gráfico</h3>
               <DonutChart
                 data={stats.tagHierarchy.map((n) => ({
                   label: n.tag.nome,
@@ -203,78 +287,7 @@ export default function DashboardPage() {
                 formatValue={formatBRL}
               />
             </div>
-            <GastosPorTagHierarquico
-              nodes={stats.tagHierarchy}
-              totalGastos={stats.totalGastosMes}
-              formatBRL={formatBRL}
-              gastos={stats.gastos}
-              tags={tags}
-            />
-          </div>
-        )}
-
-        {stats.topContas.length > 0 && (
-          <div className="pt-2 border-t border-slate-700/50">
-            <h3 className="text-slate-300 font-medium mb-3">Gastos por conta</h3>
-            <ul className="space-y-2">
-              {stats.topContas.map(([conta, valor]) => (
-                <li
-                  key={conta}
-                  className="flex justify-between text-sm text-slate-400"
-                >
-                  <span>{conta}</span>
-                  <span className="text-slate-200 font-medium">
-                    {formatBRL(valor)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {stats.maioresGastos.length > 0 && (
-          <div className="pt-2 border-t border-slate-700/50">
-            <h3 className="text-slate-300 font-medium mb-3">
-              Maiores gastos do mês
-            </h3>
-            <ul className="space-y-2">
-              {stats.maioresGastos.map((t) => (
-                <li
-                  key={t.id}
-                  className="flex justify-between items-center gap-2 text-sm"
-                >
-                  <span className="text-slate-300 truncate">{t.descricao}</span>
-                  <span className="text-red-400 font-medium shrink-0">
-                    {formatBRL(Math.abs(t.valor))}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {stats.tagHierarchy.length === 0 &&
-          stats.topContas.length === 0 &&
-          stats.maioresGastos.length === 0 && (
-            <div className="pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-700/50 space-y-2">
-              <p className="text-slate-500 text-sm">
-                Nenhum gasto neste mês.{" "}
-                <Link href="/" className="text-brand-500 hover:underline">
-                  Adicione uma transação
-                </Link>
-              </p>
-              {stats.totalTransacoes === 0 && (
-                <button
-                  type="button"
-                  onClick={loadSampleData}
-                  className="text-sm text-brand-400 hover:text-brand-300 underline cursor-pointer"
-                >
-                  Carregar dados de exemplo
-                </button>
-              )}
-            </div>
           )}
-          </div>
         </div>
       </div>
     </div>

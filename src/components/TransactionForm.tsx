@@ -249,17 +249,19 @@ function TransactionFormInner({
     if (parcelaIndex === 0) return form.data;
 
     if (conta?.isCartaoCredito && conta.dataFechamento != null) {
-      const diaParcela = conta.dataFechamento + 1;
-      const aposFechamento = d > conta.dataFechamento;
+      const aposFechamento = d >= conta.dataFechamento;
       const offsetMes = aposFechamento ? 1 : 0;
-      const mesAno = new Date(y, m - 1 + parcelaIndex + offsetMes, 1);
-      const ultimoDia = new Date(
-        mesAno.getFullYear(),
-        mesAno.getMonth() + 1,
-        0
-      ).getDate();
-      const dia = Math.min(diaParcela, ultimoDia);
-      return `${mesAno.getFullYear()}-${String(mesAno.getMonth() + 1).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+      const mesBilling = new Date(y, m - 1 + parcelaIndex + offsetMes, 1);
+      const primeiroDiaPeriodo = new Date(
+        mesBilling.getFullYear(),
+        mesBilling.getMonth() - 1,
+        conta.dataFechamento
+      );
+      const yy = primeiroDiaPeriodo.getFullYear();
+      const mm = primeiroDiaPeriodo.getMonth() + 1;
+      const ultimoDia = new Date(yy, mm, 0).getDate();
+      const dd = Math.min(conta.dataFechamento, ultimoDia);
+      return `${yy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
     }
 
     const mesAno = new Date(y, m - 1 + parcelaIndex, 1);

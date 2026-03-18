@@ -31,10 +31,11 @@ export function getDataVencimentoFatura(
  * Retorna o mês efetivo para fluxo de caixa.
  * - Contas NÃO marcadas como cartão de crédito: usa o mês da data da transação
  *   (seja despesa ou receita).
- * - Contas marcadas como cartão de crédito (apenas despesas): transações após o
- *   dia de fechamento caem no mês seguinte (vencimento da fatura).
- *   Parcelas seguem a mesma lógica; a data da transação (ex: 14/03) permanece
- *   inalterada, mas o gasto entra no mês da fatura.
+ * - Contas marcadas como cartão de crédito (apenas despesas): o período da fatura
+ *   vai do dia de fechamento do mês anterior até o dia anterior ao fechamento do
+ *   mês atual. Ex: fechamento dia 7 → fatura de março = 7/fev a 6/mar.
+ *   Transações no dia de fechamento ou depois caem na fatura do mês seguinte.
+ *   Parcelas seguem a mesma lógica.
  * - Receitas em cartão de crédito: usa o mês da data da transação.
  */
 export function getMesEfetivo(t: Transacao, contas: ContaItem[]): string {
@@ -49,7 +50,7 @@ export function getMesEfetivo(t: Transacao, contas: ContaItem[]): string {
   }
 
   const diaFechamento = conta.dataFechamento;
-  if (d <= diaFechamento) {
+  if (d < diaFechamento) {
     return `${y}-${String(m).padStart(2, "0")}`;
   }
   const nextMonth = m === 12 ? 1 : m + 1;
