@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { TrendingUp, TrendingDown, Wallet, Receipt, Tag, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { TrendingUp, TrendingDown, Wallet, Receipt, Tag, ChevronLeft, ChevronRight, Check, ChevronDown } from "lucide-react";
 import { buildTagSpendingHierarchy } from "@/lib/tags-utils";
 import { GastosPorTagHierarquico } from "@/components/GastosPorTagHierarquico";
 import { DonutChart } from "@/components/DonutChart";
@@ -9,10 +9,36 @@ import Link from "next/link";
 import { useData } from "@/context/DataContext";
 import { getMesEfetivo } from "@/lib/fluxoCaixa";
 
+const DASHBOARD_CONTAS_KEY = "finance-app-dashboard-contas";
+
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
+
+function loadDashboardContas(contas: { nome: string }[]): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(DASHBOARD_CONTAS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as string[];
+    if (!Array.isArray(parsed)) return null;
+    if (parsed.length === 0) return [];
+    const valid = parsed.filter((c) => contas.some((x) => x.nome === c));
+    return valid.length === contas.length ? null : valid.length > 0 ? valid : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveDashboardContas(ids: string[] | null) {
+  if (typeof window === "undefined") return;
+  if (ids === null) {
+    localStorage.removeItem(DASHBOARD_CONTAS_KEY);
+  } else {
+    localStorage.setItem(DASHBOARD_CONTAS_KEY, JSON.stringify(ids));
+  }
+}
 
 export default function DashboardPage() {
   const { transacoes, tags, contas, loading, loadSampleData } = useData();
@@ -20,11 +46,44 @@ export default function DashboardPage() {
   const now = new Date();
   const mesAtualPadrao = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const [mesSelecionado, setMesSelecionado] = useState(mesAtualPadrao);
+  const [contasDashboard, setContasDashboard] = useState<string[] | null>(null);
+  const [contasDropdownOpen, setContasDropdownOpen] = useState(false);
+  const contasDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const saved = loadDashboardContas(contas);
+    setContasDashboard(saved);
+  }, [contas]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (contasDropdownRef.current && !contasDropdownRef.current.contains(e.target as Node)) {
+        setContasDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const contasAtivas = contasDashboard ?? contas.map((c) => c.nome);
+  const toggleConta = (nome: string) => {
+    const next = contasAtivas.includes(nome)
+      ? contasAtivas.filter((c) => c !== nome)
+      : [...contasAtivas, nome];
+    const toSave = next.length === contas.length ? null : next;
+    setContasDashboard(toSave);
+    saveDashboardContas(toSave);
+  };
+  const selectAll = () => {
+    setContasDashboard(null);
+    saveDashboardContas(null);
+  };
 
   const stats = useMemo(() => {
-    const transacoesMes = transacoes.filter(
+    let transacoesMes = transacoes.filter(
       (t) => getMesEfetivo(t, contas) === mesSelecionado
     );
+    transacoesMes = transacoesMes.filter((t) => contasAtivas.includes(t.conta));
 
     const gastos = transacoesMes.filter((t) => t.valor < 0);
     const receitas = transacoesMes.filter((t) => t.valor > 0);
@@ -69,7 +128,7 @@ export default function DashboardPage() {
       qtdReceitas: receitas.length,
       totalTransacoes: transacoes.length,
     };
-  }, [transacoes, tags, contas, mesSelecionado]);
+  }, [transacoes, tags, contas, mesSelecionado, contasAtivas]);
 
   const formatBRL = (n: number) =>
     new Intl.NumberFormat("pt-BR", {
@@ -100,7 +159,65 @@ export default function DashboardPage() {
           <h1 className="text-[length:var(--fluid-text-2xl)] font-bold text-slate-100">Dashboard</h1>
           <p className="text-[length:var(--fluid-text-sm)] text-slate-400 mt-1">{stats.mesLabel}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {contas.length > 0 && (
+          <div className="relative" ref={contasDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setContasDropdownOpen((o) => !o)}
+              className="flex items-center gap-2 min-h-[44px] px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700/50 text-sm"
+            >
+              <Wallet size={18} className="shrink-0" />
+              <span>
+                {contasAtivas.length === contas.length
+                  ? "Todas as contas"
+                  : `${contasAtivas.length} de ${contas.length} contas`}
+              </span>
+              <ChevronDown size={16} className={`shrink-0 transition-transform ${contasDropdownOpen ? "rotate-180" : ""}`} />
+            </button>
+            {contasDropdownOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40 tablet:hidden"
+                  onClick={() => setContasDropdownOpen(false)}
+                  aria-hidden
+                />
+                <div className="fixed bottom-0 left-0 right-0 z-50 max-h-[50vh] overflow-y-auto py-4 px-4 rounded-t-xl bg-slate-800 border border-slate-700 shadow-xl tablet:absolute tablet:bottom-auto tablet:left-0 tablet:right-auto tablet:top-full tablet:mt-1 tablet:max-h-none tablet:min-w-[220px] tablet:py-2 tablet:px-0 tablet:rounded-lg tablet:border">
+                  <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 tablet:px-3">
+                    <span className="text-sm font-medium text-slate-300">Contas no dashboard</span>
+                    <button
+                      type="button"
+                      onClick={selectAll}
+                      className="text-xs text-brand-400 hover:text-brand-300"
+                    >
+                      Todas
+                    </button>
+                  </div>
+                  {contas.map((c) => {
+                    const checked = contasAtivas.includes(c.nome);
+                    return (
+                      <label
+                        key={c.id}
+                        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-700/50 min-w-0"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleConta(c.nome)}
+                          className="sr-only"
+                        />
+                        <span className="w-5 h-5 flex items-center justify-center rounded border border-slate-600 bg-slate-900 shrink-0">
+                          {checked && <Check size={14} className="text-brand-400" />}
+                        </span>
+                        <span className="text-sm text-slate-200 truncate">{c.nome}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+          )}
           <button
             type="button"
             onClick={() => mudarMes(-1)}
