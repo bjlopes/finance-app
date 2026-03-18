@@ -201,11 +201,11 @@ export function GastosPorTagHierarquico({
 
       {modalNode && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+          className="modal-overlay"
           onClick={() => setModalNode(null)}
         >
           <div
-            className="w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col rounded-xl glass shadow-xl"
+            className="modal-content-centered w-full max-w-md overflow-hidden flex flex-col rounded-xl glass shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0">

@@ -6,6 +6,14 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Modals centered in viewport**
+  - Popups (account selector, receitas, transaction form, subtag filter, bulk edit, parceladas, tag transactions, conta/tag forms) now appear centered in the visible viewport
+  - Stays centered regardless of page scroll position
+
+- **Numeric keyboard on mobile**
+  - Currency/value fields use `inputMode="decimal"` to show numeric keyboard with decimal on mobile
+  - Parcelas count input uses `inputMode="numeric"` when custom value (13+)
+
 - **Tag hierarchy (3 levels)**
   - Tags support subtags and sub-subtags (tag › subtag › sub-subtag)
   - Create-on-the-fly: create tags, subtags, and sub-subtags when typing a new name

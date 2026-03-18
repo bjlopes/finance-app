@@ -47,7 +47,7 @@ export function CurrencyInput({
   return (
     <input
       type="text"
-      inputMode="numeric"
+      inputMode="decimal"
       value={display}
       onChange={handleChange}
       onBlur={handleBlur}

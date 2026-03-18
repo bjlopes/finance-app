@@ -195,7 +195,7 @@ export default function TagsPage() {
 
       {showForm && !editingTag && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 overflow-y-auto"
+          className="modal-overlay"
           onClick={() => {
             setShowForm(false);
             setParentId(null);
@@ -203,7 +203,7 @@ export default function TagsPage() {
         >
           <form
             onSubmit={handleSubmit}
-            className="glass rounded-xl p-6 space-y-4 w-full max-w-md my-auto"
+            className="modal-content-centered glass rounded-xl p-6 space-y-4 w-full max-w-md overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
           <h2 className="text-lg font-semibold text-slate-200">

@@ -68,12 +68,21 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
   .fluid-container {
     width: min(100%, var(--container-max, 56rem));
     margin-inline: auto;
     padding-inline: var(--fluid-space);
+  }
+  /* Modal centered in viewport (not scroll), works when page is scrolled */
+  .modal-overlay {
+    @apply fixed inset-0 z-50 p-4 bg-black/60;
+  }
+  .modal-content-centered {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 51;
+    max-height: min(85vh, calc(100dvh - 2rem));
   }
 }

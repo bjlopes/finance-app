@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { TrendingUp, TrendingDown, Wallet, Receipt, Tag, ChevronLeft, ChevronRight, Check, ChevronDown } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Receipt, Tag, ChevronLeft, ChevronRight, Check, ChevronDown, X } from "lucide-react";
 import { buildTagSpendingHierarchy } from "@/lib/tags-utils";
 import { GastosPorTagHierarquico } from "@/components/GastosPorTagHierarquico";
 import { DonutChart } from "@/components/DonutChart";
 import Link from "next/link";
 import { useData } from "@/context/DataContext";
 import { getMesEfetivo } from "@/lib/fluxoCaixa";
+import { formatLocalDate } from "@/lib/dateUtils";
 
 const DASHBOARD_CONTAS_KEY = "finance-app-dashboard-contas";
 
@@ -48,6 +49,7 @@ export default function DashboardPage() {
   const [mesSelecionado, setMesSelecionado] = useState(mesAtualPadrao);
   const [contasDashboard, setContasDashboard] = useState<string[] | null>(null);
   const [contasDropdownOpen, setContasDropdownOpen] = useState(false);
+  const [receitasModalOpen, setReceitasModalOpen] = useState(false);
   const contasDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -100,14 +102,13 @@ export default function DashboardPage() {
 
     const tagHierarchy = buildTagSpendingHierarchy(tags, gastosPorTagId);
 
-    const porConta: Record<string, number> = {};
-    gastos.forEach((t) => {
-      porConta[t.conta] = (porConta[t.conta] || 0) + Math.abs(t.valor);
+    const saldoPorConta: Record<string, number> = {};
+    transacoesMes.forEach((t) => {
+      saldoPorConta[t.conta] = (saldoPorConta[t.conta] || 0) + t.valor;
     });
 
-    const topContas = Object.entries(porConta)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5);
+    const topContas = Object.entries(saldoPorConta)
+      .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a));
 
     const maioresGastos = [...gastos]
       .sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor))
@@ -121,6 +122,7 @@ export default function DashboardPage() {
       saldoMes: saldo,
       tagHierarchy,
       gastos,
+      receitas,
       topContas,
       maioresGastos,
       qtdTransacoesMes: transacoesMes.length,
@@ -176,14 +178,15 @@ export default function DashboardPage() {
               <ChevronDown size={16} className={`shrink-0 transition-transform ${contasDropdownOpen ? "rotate-180" : ""}`} />
             </button>
             {contasDropdownOpen && (
-              <>
+              <div
+                className="modal-overlay"
+                onClick={() => setContasDropdownOpen(false)}
+              >
                 <div
-                  className="fixed inset-0 z-40 tablet:hidden"
-                  onClick={() => setContasDropdownOpen(false)}
-                  aria-hidden
-                />
-                <div className="fixed bottom-0 left-0 right-0 z-50 max-h-[50vh] overflow-y-auto py-4 px-4 rounded-t-xl bg-slate-800 border border-slate-700 shadow-xl tablet:absolute tablet:bottom-auto tablet:left-0 tablet:right-auto tablet:top-full tablet:mt-1 tablet:max-h-none tablet:min-w-[220px] tablet:py-2 tablet:px-0 tablet:rounded-lg tablet:border">
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/50 tablet:px-3">
+                  className="modal-content-centered w-full max-w-sm overflow-y-auto rounded-xl bg-slate-800 border border-slate-700 shadow-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50 sticky top-0 bg-slate-800">
                     <span className="text-sm font-medium text-slate-300">Contas no dashboard</span>
                     <button
                       type="button"
@@ -193,6 +196,7 @@ export default function DashboardPage() {
                       Todas
                     </button>
                   </div>
+                  <div className="p-2">
                   {contas.map((c) => {
                     const checked = contasAtivas.includes(c.nome);
                     return (
@@ -213,8 +217,9 @@ export default function DashboardPage() {
                       </label>
                     );
                   })}
+                  </div>
                 </div>
-              </>
+              </div>
             )}
           </div>
           )}
@@ -264,7 +269,11 @@ export default function DashboardPage() {
                   {stats.qtdGastos} {stats.qtdGastos === 1 ? "transação" : "transações"}
                 </p>
               </div>
-              <div>
+              <button
+                type="button"
+                onClick={() => stats.qtdReceitas > 0 && setReceitasModalOpen(true)}
+                className={`text-left ${stats.qtdReceitas > 0 ? "cursor-pointer hover:opacity-90" : "cursor-default"}`}
+              >
                 <div className="flex items-center gap-2 text-slate-400 text-sm mb-1">
                   <TrendingUp size={16} />
                   Receitas
@@ -274,8 +283,9 @@ export default function DashboardPage() {
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {stats.qtdReceitas} {stats.qtdReceitas === 1 ? "transação" : "transações"}
+                  {stats.qtdReceitas > 0 && " · Clique para ver"}
                 </p>
-              </div>
+              </button>
             </div>
 
             <div className="flex items-center justify-between py-3 border-y border-slate-700/50">
@@ -329,16 +339,16 @@ export default function DashboardPage() {
 
             {stats.topContas.length > 0 && (
               <div className="pt-2 border-t border-slate-700/50">
-                <h3 className="text-slate-300 font-medium mb-3">Gastos por conta</h3>
+                <h3 className="text-slate-300 font-medium mb-3">Saldo por conta</h3>
                 <ul className="space-y-2">
-                  {stats.topContas.map(([conta, valor]) => (
+                  {stats.topContas.map(([conta, saldo]) => (
                     <li
                       key={conta}
                       className="flex justify-between text-sm text-slate-400"
                     >
                       <span>{conta}</span>
-                      <span className="text-slate-200 font-medium">
-                        {formatBRL(valor)}
+                      <span className={`font-medium ${saldo >= 0 ? "text-brand-400" : "text-red-400"}`}>
+                        {formatBRL(saldo)}
                       </span>
                     </li>
                   ))}
@@ -407,6 +417,55 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {receitasModalOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => setReceitasModalOpen(false)}
+        >
+          <div
+            className="modal-content-centered w-full max-w-md overflow-hidden flex flex-col rounded-xl glass shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0">
+              <h4 className="font-semibold text-slate-200">Receitas do mês</h4>
+              <button
+                type="button"
+                onClick={() => setReceitasModalOpen(false)}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 shrink-0"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-4">
+              {stats.receitas.length === 0 ? (
+                <p className="text-slate-500 text-sm">Nenhuma receita</p>
+              ) : (
+                <ul className="space-y-2">
+                  {[...stats.receitas]
+                    .sort((a, b) => b.data.localeCompare(a.data))
+                    .map((t) => (
+                      <li
+                        key={t.id}
+                        className="flex justify-between items-start gap-2 py-2 border-b border-slate-700/30 last:border-0"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-slate-200 truncate">{t.descricao}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {formatLocalDate(t.data, { day: "2-digit", month: "short" })} • {t.conta}
+                          </p>
+                        </div>
+                        <span className="text-brand-400 font-medium shrink-0">
+                          {formatBRL(t.valor)}
+                        </span>
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -211,11 +211,11 @@ export default function TransacoesPage() {
 
       {showForm && !editingTransaction && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 overflow-y-auto"
+          className="modal-overlay"
           onClick={closeForm}
         >
           <div
-            className="glass rounded-xl p-6 w-full max-w-lg my-auto"
+            className="modal-content-centered glass rounded-xl p-6 w-full max-w-lg overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <TransactionForm
@@ -305,9 +305,15 @@ export default function TransacoesPage() {
                     />
                   </button>
                   {subtagDropdownOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40 tablet:hidden" onClick={() => setSubtagDropdownOpen(false)} aria-hidden />
-                      <div className="fixed bottom-0 left-0 right-0 z-50 max-h-[60vh] overflow-y-auto py-4 px-4 rounded-t-xl bg-slate-800 border-t border-slate-700 shadow-xl tablet:absolute tablet:bottom-auto tablet:left-0 tablet:right-auto tablet:top-full tablet:mt-1 tablet:max-h-none tablet:min-w-[160px] tablet:py-2 tablet:px-0 tablet:rounded-lg tablet:border tablet:border-slate-700">
+                    <div
+                      className="modal-overlay"
+                      onClick={() => setSubtagDropdownOpen(false)}
+                    >
+                      <div
+                        className="modal-content-centered w-full max-w-sm overflow-y-auto rounded-xl bg-slate-800 border border-slate-700 shadow-xl"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                      <div className="p-2">
                       {subtagsDaTag.length > 2 && (
                         <button
                           type="button"
@@ -353,8 +359,9 @@ export default function TransacoesPage() {
                           </label>
                         );
                       })}
+                      </div>
+                      </div>
                     </div>
-                    </>
                   )}
                 </div>
               )}
@@ -541,11 +548,11 @@ export default function TransacoesPage() {
 
       {bulkEditOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+          className="modal-overlay"
           onClick={() => setBulkEditOpen(false)}
         >
           <div
-            className="glass rounded-xl p-5 w-full max-w-md max-h-[90vh] overflow-y-auto"
+            className="modal-content-centered glass rounded-xl p-5 w-full max-w-md overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-lg font-semibold text-slate-200 mb-2">
@@ -588,11 +595,11 @@ export default function TransacoesPage() {
 
       {parceladasModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+          className="modal-overlay"
           onClick={() => setParceladasModalOpen(false)}
         >
           <div
-            className="glass rounded-xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col"
+            className="modal-content-centered glass rounded-xl w-full max-w-lg overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0">

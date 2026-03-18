@@ -540,6 +540,7 @@ function TransactionFormInner({
                   {form.parcelas > 12 && (
                     <input
                       type="number"
+                      inputMode="numeric"
                       min={13}
                       max={999}
                       value={form.parcelas}
