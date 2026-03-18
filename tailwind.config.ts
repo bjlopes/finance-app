@@ -10,6 +10,7 @@ const config: Config = {
     extend: {
       screens: {
         tablet: "834px",
+        ipad: "1210px",
       },
       fontFamily: {
         sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],

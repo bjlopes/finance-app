@@ -166,7 +166,7 @@ export default function ContasPage() {
         </div>
       )}
 
-      <div className="glass rounded-xl p-6">
+      <div className="glass rounded-xl p-6 ipad:p-7">
         <h2 className="text-lg font-semibold text-slate-200 mb-4">
           Suas contas ({contas.length})
         </h2>

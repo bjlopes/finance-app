@@ -14,6 +14,13 @@ All notable changes to this project will be documented in this file.
   - Currency/value fields use `inputMode="decimal"` to show numeric keyboard with decimal on mobile
   - Parcelas count input uses `inputMode="numeric"` when custom value (13+)
 
+- **iPad Pro 11" M4 landscape optimization**
+  - New `ipad` breakpoint at 1210px (landscape viewport width)
+  - Wider content area (75rem) and increased padding on iPad
+  - Dashboard: two-column grid with fixed donut chart column (260–320px)
+  - Transações: improved filter grid spacing and padding
+  - Contas/Tags: increased card padding
+
 - **Tag hierarchy (3 levels)**
   - Tags support subtags and sub-subtags (tag › subtag › sub-subtag)
   - Create-on-the-fly: create tags, subtags, and sub-subtags when typing a new name

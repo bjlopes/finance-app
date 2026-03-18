@@ -229,8 +229,8 @@ export default function TransacoesPage() {
       )}
 
       <div className="glass rounded-xl overflow-visible">
-        <div className="p-4 tablet:p-5 border-b border-slate-700/50 space-y-3 tablet:space-y-4">
-          <div className="grid grid-cols-1 gap-4 tablet:grid-cols-2 lg:grid-cols-3 space-y-3 tablet:space-y-0">
+        <div className="p-4 tablet:p-5 ipad:p-6 border-b border-slate-700/50 space-y-3 tablet:space-y-4 ipad:space-y-5">
+          <div className="grid grid-cols-1 gap-4 tablet:grid-cols-2 lg:grid-cols-3 ipad:gap-5 space-y-3 tablet:space-y-0">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
             <label className="text-sm text-slate-400 shrink-0">Buscar:</label>
             <input
