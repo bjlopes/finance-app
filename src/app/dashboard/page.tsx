@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { TrendingUp, TrendingDown, Wallet, Receipt, Tag, ChevronLeft, ChevronRight } from "lucide-react";
 import { buildTagSpendingHierarchy } from "@/lib/tags-utils";
 import { GastosPorTagHierarquico } from "@/components/GastosPorTagHierarquico";
+import { DonutChart } from "@/components/DonutChart";
 import Link from "next/link";
 import { useData } from "@/context/DataContext";
 import { getMesEfetivo } from "@/lib/fluxoCaixa";
@@ -60,6 +61,7 @@ export default function DashboardPage() {
       totalReceitasMes: totalReceitas,
       saldoMes: saldo,
       tagHierarchy,
+      gastos,
       topContas,
       maioresGastos,
       qtdTransacoesMes: transacoesMes.length,
@@ -124,70 +126,89 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="glass rounded-xl p-5 space-y-6">
-        <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-700/50 pb-3">
-          Fluxo do mês
-        </h2>
+      <div className="glass rounded-xl p-5">
+        <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:items-start space-y-6 lg:space-y-0">
+          {/* Coluna esquerda: Fluxo do mês */}
+          <div className="space-y-6 lg:pr-4 lg:border-r lg:border-slate-700/50">
+            <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-700/50 pb-3">
+              Fluxo do mês
+            </h2>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-slate-400 text-sm mb-1">
-              <TrendingDown size={16} />
-              Gastos
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="flex items-center gap-2 text-slate-400 text-sm mb-1">
+                  <TrendingDown size={16} />
+                  Gastos
+                </div>
+                <p className="text-lg font-bold text-red-400">
+                  {formatBRL(stats.totalGastosMes)}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {stats.qtdGastos} {stats.qtdGastos === 1 ? "transação" : "transações"}
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 text-slate-400 text-sm mb-1">
+                  <TrendingUp size={16} />
+                  Receitas
+                </div>
+                <p className="text-lg font-bold text-brand-400">
+                  {formatBRL(stats.totalReceitasMes)}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {stats.qtdReceitas} {stats.qtdReceitas === 1 ? "transação" : "transações"}
+                </p>
+              </div>
             </div>
-            <p className="text-lg font-bold text-red-400">
-              {formatBRL(stats.totalGastosMes)}
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {stats.qtdGastos} {stats.qtdGastos === 1 ? "transação" : "transações"}
-            </p>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 text-slate-400 text-sm mb-1">
-              <TrendingUp size={16} />
-              Receitas
+
+            <div className="flex items-center justify-between py-3 border-y border-slate-700/50">
+              <div className="flex items-center gap-2 text-slate-300">
+                <Wallet size={18} />
+                <span className="font-medium">Saldo do mês</span>
+              </div>
+              <p
+                className={`text-lg font-bold ${
+                  stats.saldoMes >= 0 ? "text-brand-400" : "text-red-400"
+                }`}
+              >
+                {formatBRL(stats.saldoMes)}
+              </p>
             </div>
-            <p className="text-lg font-bold text-brand-400">
-              {formatBRL(stats.totalReceitasMes)}
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {stats.qtdReceitas} {stats.qtdReceitas === 1 ? "transação" : "transações"}
-            </p>
+
+            <div className="flex items-center justify-between text-sm text-slate-400">
+              <span className="flex items-center gap-2">
+                <Receipt size={16} />
+                Total no mês
+              </span>
+              <span>{stats.qtdTransacoesMes} transações</span>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center justify-between py-3 border-y border-slate-700/50">
-          <div className="flex items-center gap-2 text-slate-300">
-            <Wallet size={18} />
-            <span className="font-medium">Saldo do mês</span>
-          </div>
-          <p
-            className={`text-lg font-bold ${
-              stats.saldoMes >= 0 ? "text-brand-400" : "text-red-400"
-            }`}
-          >
-            {formatBRL(stats.saldoMes)}
-          </p>
-        </div>
-
-        <div className="flex items-center justify-between text-sm text-slate-400">
-          <span className="flex items-center gap-2">
-            <Receipt size={16} />
-            Total no mês
-          </span>
-          <span>{stats.qtdTransacoesMes} transações</span>
-        </div>
-
+          {/* Coluna direita: Gastos por tag, conta, maiores */}
+          <div className="space-y-6 lg:pl-4">
         {stats.tagHierarchy.length > 0 && (
-          <div className="pt-2 border-t border-slate-700/50">
+          <div className="pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-700/50">
             <h3 className="flex items-center gap-2 text-slate-300 font-medium mb-3">
               <Tag size={16} />
               Gastos por tag
             </h3>
+            <div className="mb-4">
+              <DonutChart
+                data={stats.tagHierarchy.map((n) => ({
+                  label: n.tag.nome,
+                  value: n.total,
+                  color: n.tag.cor || "#6366f1",
+                }))}
+                total={stats.totalGastosMes}
+                formatValue={formatBRL}
+              />
+            </div>
             <GastosPorTagHierarquico
               nodes={stats.tagHierarchy}
               totalGastos={stats.totalGastosMes}
               formatBRL={formatBRL}
+              gastos={stats.gastos}
+              tags={tags}
             />
           </div>
         )}
@@ -235,7 +256,7 @@ export default function DashboardPage() {
         {stats.tagHierarchy.length === 0 &&
           stats.topContas.length === 0 &&
           stats.maioresGastos.length === 0 && (
-            <div className="pt-2 border-t border-slate-700/50 space-y-2">
+            <div className="pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-700/50 space-y-2">
               <p className="text-slate-500 text-sm">
                 Nenhum gasto neste mês.{" "}
                 <Link href="/" className="text-brand-500 hover:underline">
@@ -253,6 +274,8 @@ export default function DashboardPage() {
               )}
             </div>
           )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -180,22 +180,22 @@ export function TagSubtagInput({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-2 p-2 rounded-lg bg-slate-800/50 border border-slate-700 min-h-[42px]">
+      <div className="flex flex-wrap gap-2 p-2 rounded-lg bg-slate-800/50 border border-slate-700 min-h-[42px] min-w-0">
         {selectedTags.map((tag) => (
           <span
             key={tag.id}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium break-words max-w-full min-w-0"
             style={{
               backgroundColor: `${tag.cor}30`,
               color: tag.cor,
               border: `1px solid ${tag.cor}60`,
             }}
           >
-            {getTagPath(tag, tags)}
+            <span className="break-words min-w-0">{getTagPath(tag, tags)}</span>
             <button
               type="button"
               onClick={() => removeSelection(tag.id)}
-              className="hover:opacity-80 ml-0.5 cursor-pointer"
+              className="hover:opacity-80 ml-0.5 cursor-pointer shrink-0"
             >
               <X size={14} />
             </button>

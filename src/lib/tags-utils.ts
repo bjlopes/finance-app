@@ -110,7 +110,7 @@ export function buildTagSpendingHierarchy(
 }
 
 /** Retorna todos os IDs descendentes recursivamente (filhos, netos, etc.). */
-function getDescendantIds(tagId: string, tags: Tag[]): string[] {
+export function getDescendantIds(tagId: string, tags: Tag[]): string[] {
   const direct = tags.filter((t) => t.parentId === tagId).map((t) => t.id);
   const nested = direct.flatMap((id) => getDescendantIds(id, tags));
   return [...direct, ...nested];

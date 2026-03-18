@@ -6,13 +6,9 @@ import { TagSubtagInput } from "@/components/TagSubtagInput";
 import { CurrencyInput } from "@/components/CurrencyInput";
 import { getTagPath } from "@/lib/tags-utils";
 import { useData } from "@/context/DataContext";
+import { getLocalDateString } from "@/lib/dateUtils";
+import { parseParcela } from "@/lib/parcelas-utils";
 import type { Transacao } from "@/types";
-
-function parseParcela(descricao: string): { base: string; n: number; total: number } | null {
-  const match = descricao.match(/^(.+?)\s+(\d+)\/(\d+)$/);
-  if (!match) return null;
-  return { base: match[1].trim(), n: parseInt(match[2], 10), total: parseInt(match[3], 10) };
-}
 
 function findParcelasRelacionadas(
   transacao: Transacao,
@@ -128,7 +124,7 @@ function TransactionFormInner({
   showCancel = false,
   onCancel,
 }: TransactionFormProps) {
-  const { tags, contas, saveTransacao, createTag, transacoes: allTransacoes } = useData();
+  const { tags, contas, saveTransacao, deleteTransacao, createTag, transacoes: allTransacoes } = useData();
 
   const parcelasRelacionadas = useMemo(
     () =>
@@ -144,7 +140,7 @@ function TransactionFormInner({
     valor: "",
     valorParcelas: [] as number[],
     conta: "",
-    data: new Date().toISOString().split("T")[0],
+    data: getLocalDateString(),
     tagIds: [] as string[],
     parcelada: false,
     parcelas: 2,
@@ -205,7 +201,7 @@ function TransactionFormInner({
       valor: "",
       valorParcelas: [],
       conta: contas[0]?.nome ?? "",
-      data: new Date().toISOString().split("T")[0],
+      data: getLocalDateString(),
       tagIds: [],
       parcelada: false,
       parcelas: 2,
@@ -221,14 +217,11 @@ function TransactionFormInner({
 
   const mostraParcelas =
     (form.parcelada && !transaction) || isEdicaoParcelada;
-  const numParcelas = isEdicaoParcelada
-    ? parcelasRelacionadas.length
-    : form.parcelas;
+  const numParcelas = mostraParcelas ? form.parcelas : 1;
 
   useEffect(() => {
     if (
-      form.parcelada &&
-      !transaction &&
+      (form.parcelada || isEdicaoParcelada) &&
       numParcelas >= 2 &&
       (form.valorParcelas.length !== numParcelas || form.valorParcelas.length === 0)
     ) {
@@ -245,18 +238,21 @@ function TransactionFormInner({
         }));
       }
     }
-  }, [form.parcelada, form.valor, form.parcelas, transaction, numParcelas]);
+  }, [form.parcelada, form.valor, form.parcelas, isEdicaoParcelada, numParcelas, form.valorParcelas.length]);
 
   const getDataParcela = (parcelaIndex: number): string => {
-    if (parcelaIndex === 0) return form.data;
     const parts = form.data?.split("-");
-    if (!parts || parts.length !== 3) return form.data;
+    if (!parts || parts.length !== 3) return form.data ?? "";
     const [y, m, d] = parts.map(Number);
     const conta = contas.find((c) => c.nome === form.conta);
 
+    if (parcelaIndex === 0) return form.data;
+
     if (conta?.isCartaoCredito && conta.dataFechamento != null) {
       const diaParcela = conta.dataFechamento + 1;
-      const mesAno = new Date(y, m - 1 + parcelaIndex, 1);
+      const aposFechamento = d > conta.dataFechamento;
+      const offsetMes = aposFechamento ? 1 : 0;
+      const mesAno = new Date(y, m - 1 + parcelaIndex + offsetMes, 1);
       const ultimoDia = new Date(
         mesAno.getFullYear(),
         mesAno.getMonth() + 1,
@@ -278,6 +274,9 @@ function TransactionFormInner({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (form.tagIds.length === 0 && !confirm("Esta transação não tem nenhuma tag. Deseja salvar mesmo assim?")) {
+      return;
+    }
     let valores: number[];
     if (mostraParcelas) {
       if (form.valorParcelas.length === numParcelas) {
@@ -313,18 +312,22 @@ function TransactionFormInner({
         saveTransacao(transacao);
       }
     } else if (isEdicaoParcelada && parcelasRelacionadas.length > 0) {
-      parcelasRelacionadas.forEach((p, i) => {
+      const novoTotal = parcelas;
+      for (let i = 0; i < novoTotal; i++) {
         const transacao: Transacao = {
-          ...p,
-          descricao: `${form.descricao} ${i + 1}/${parcelasRelacionadas.length}`,
-          valor: Math.round(form.valorParcelas[i] * 100) / 100 * sinal,
+          id: i < parcelasRelacionadas.length ? parcelasRelacionadas[i]!.id : crypto.randomUUID(),
+          descricao: `${form.descricao} ${i + 1}/${novoTotal}`,
+          valor: Math.round(form.valorParcelas[i]! * 100) / 100 * sinal,
           conta: form.conta,
           data: getDataParcela(i),
           tagIds: form.tagIds,
           comentario,
         };
         saveTransacao(transacao);
-      });
+      }
+      for (let i = novoTotal; i < parcelasRelacionadas.length; i++) {
+        deleteTransacao(parcelasRelacionadas[i]!.id);
+      }
     } else {
       const transacao: Transacao = {
         id: transaction?.id ?? crypto.randomUUID(),
@@ -343,7 +346,7 @@ function TransactionFormInner({
       valor: "",
       valorParcelas: [],
       conta: contas[0]?.nome ?? "",
-      data: new Date().toISOString().split("T")[0],
+      data: getLocalDateString(),
       tagIds: [],
       parcelada: false,
       parcelas: 2,
@@ -368,8 +371,14 @@ function TransactionFormInner({
       </h2>
       {isEdicaoParcelada && (
         <p className="text-sm text-slate-400">
-          Editando {parcelasRelacionadas.length} parcelas. As alterações serão
-          aplicadas a todas.
+          Editando {numParcelas} parcela{numParcelas !== 1 ? "s" : ""}.
+          {numParcelas !== parcelasRelacionadas.length && (
+            <span className="block mt-1 text-amber-500/90">
+              {numParcelas < parcelasRelacionadas.length
+                ? `Serão removidas ${parcelasRelacionadas.length - numParcelas} parcela(s).`
+                : `Serão criadas ${numParcelas - parcelasRelacionadas.length} nova(s) parcela(s).`}
+            </span>
+          )}
         </p>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
@@ -487,6 +496,67 @@ function TransactionFormInner({
               <span className="text-sm text-slate-400">Receita</span>
             </label>
           </div>
+          {(!transaction || isEdicaoParcelada) && (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              {!transaction && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="parcelada"
+                    checked={form.parcelada}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, parcelada: e.target.checked }))
+                    }
+                    className="rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500"
+                  />
+                  <span className="text-sm text-slate-400">Compra parcelada</span>
+                </label>
+              )}
+              {(form.parcelada || isEdicaoParcelada) && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-500">
+                    {isEdicaoParcelada ? "Parcelas:" : "Em"}
+                  </span>
+                  <select
+                    value={form.parcelas <= 12 ? form.parcelas : "custom"}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setForm((f) => ({
+                        ...f,
+                        parcelas: v === "custom" ? 13 : parseInt(v, 10),
+                      }));
+                    }}
+                    className="px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                  >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={n}>
+                        {n}x
+                      </option>
+                    ))}
+                    <option value="custom">Outro</option>
+                  </select>
+                  {form.parcelas > 12 && (
+                    <input
+                      type="number"
+                      min={13}
+                      max={999}
+                      value={form.parcelas}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        if (!isNaN(v)) {
+                          setForm((f) => ({
+                            ...f,
+                            parcelas: Math.max(13, Math.min(v, 999)),
+                          }));
+                        }
+                      }}
+                      className="w-14 px-2 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {mostraParcelas && form.valorParcelas.length > 0 && (
             <div className="mt-3 space-y-2">
               <p className="text-sm text-slate-400">
@@ -559,7 +629,12 @@ function TransactionFormInner({
         </div>
       </div>
       <div className="min-w-0">
-        <label className="block text-sm text-slate-400 mb-1">Tags e subtags</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-sm text-slate-400">Tags e subtags</label>
+          {form.tagIds.length === 0 && (
+            <span className="text-xs text-amber-500/90">Sem tags — confirmação ao salvar</span>
+          )}
+        </div>
         <TagSubtagInput
           selectedIds={form.tagIds}
           tags={tags}
@@ -592,74 +667,6 @@ function TransactionFormInner({
           className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50 resize-none"
         />
       </div>
-      {!transaction && (
-        <>
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="parcelada"
-              checked={form.parcelada}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, parcelada: e.target.checked }))
-              }
-              className="rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500"
-            />
-            <label htmlFor="parcelada" className="text-sm text-slate-400">
-              Compra parcelada
-            </label>
-          </div>
-          {form.parcelada && (
-            <div className="flex flex-wrap items-end gap-2">
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">
-                  Em quantas vezes?
-                </label>
-                <select
-                  value={form.parcelas <= 12 ? form.parcelas : "custom"}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setForm((f) => ({
-                      ...f,
-                      parcelas: v === "custom" ? 13 : parseInt(v, 10),
-                    }));
-                  }}
-                  className="w-24 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-                >
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
-                    <option key={n} value={n}>
-                      {n}x
-                    </option>
-                  ))}
-                  <option value="custom">Outro</option>
-                </select>
-              </div>
-              {form.parcelas > 12 && (
-                <div>
-                  <label className="block text-sm text-slate-400 mb-1">
-                    Número de parcelas
-                  </label>
-                  <input
-                    type="number"
-                    min={13}
-                    max={999}
-                    value={form.parcelas}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      if (!isNaN(v)) {
-                        setForm((f) => ({
-                          ...f,
-                          parcelas: Math.max(13, Math.min(v, 999)),
-                        }));
-                      }
-                    }}
-                    className="w-20 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
       <div className="flex gap-2">
         <button
           type="submit"

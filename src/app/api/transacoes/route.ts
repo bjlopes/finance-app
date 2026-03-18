@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTransacoes, saveTransacao, deleteTransacao } from "@/lib/db";
+import { getLocalDateString } from "@/lib/dateUtils";
 import type { Transacao } from "@/types";
 
 export async function GET(request: NextRequest) {
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const transacao: Transacao = {
     id: body.id || crypto.randomUUID(),
-    data: body.data || new Date().toISOString().split("T")[0],
+    data: body.data || getLocalDateString(),
     descricao: body.descricao || "",
     valor: Number(body.valor) || 0,
     conta: body.conta || "Nubank",

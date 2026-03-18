@@ -37,20 +37,44 @@ export function Nav() {
   return (
     <>
       <nav className="sticky top-0 z-50 glass border-b border-slate-700/50 pt-[env(safe-area-inset-top)]">
-        <div className="max-w-4xl mx-auto px-4 py-3">
+        <div className="max-w-4xl lg:max-w-5xl mx-auto px-4 lg:px-8 py-3">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
               {showNavLinks && (
                 <button
                   type="button"
                   onClick={() => setMenuOpen(true)}
-                  className="flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg text-slate-400 hover:text-slate-200 active:bg-slate-800/50 transition-colors"
+                  className="lg:hidden flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg text-slate-400 hover:text-slate-200 active:bg-slate-800/50 transition-colors"
                   aria-label="Abrir menu"
                 >
                   <Menu size={24} />
                 </button>
               )}
-              <span className="text-brand-500 font-bold text-lg">Finanças</span>
+              <span className="text-brand-500 font-bold text-lg shrink-0">Finanças</span>
+              {showNavLinks && (
+                <ul className="hidden lg:flex items-center gap-1 ml-4">
+                  {links.map(({ href, label, icon: Icon }) => {
+                    const isActive =
+                      pathname === href ||
+                      (href !== "/" && pathname.startsWith(href));
+                    return (
+                      <li key={href}>
+                        <Link
+                          href={href}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            isActive
+                              ? "bg-brand-500/20 text-brand-400"
+                              : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+                          }`}
+                        >
+                          <Icon size={18} className="shrink-0" />
+                          {label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {user ? (
@@ -96,14 +120,14 @@ export function Nav() {
       {/* Menu overlay - só renderiza se há links */}
       {showNavLinks && menuOpen && (
         <div
-          className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm lg:hidden"
           onClick={closeMenu}
           aria-hidden="true"
         />
       )}
       {showNavLinks && (
       <div
-        className={`fixed top-0 left-0 z-[70] h-full w-[min(280px,85vw)] max-w-[280px] bg-slate-900 border-r border-slate-700/50 shadow-xl transition-transform duration-200 ease-out pt-[env(safe-area-inset-top)] ${
+        className={`fixed top-0 left-0 z-[70] h-full w-[min(280px,85vw)] max-w-[280px] bg-slate-900 border-r border-slate-700/50 shadow-xl transition-transform duration-200 ease-out pt-[env(safe-area-inset-top)] lg:hidden ${
           menuOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
