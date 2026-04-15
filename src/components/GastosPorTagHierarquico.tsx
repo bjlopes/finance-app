@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import type { Transacao } from "@/types";
 import type { Tag } from "@/types";
 import { getDescendantIds, getTagPath, type TagSpendingNode } from "@/lib/tags-utils";
 import { formatLocalDate } from "@/lib/dateUtils";
+import { useData } from "@/context/DataContext";
+import { TransactionForm } from "@/components/TransactionForm";
 
 interface GastosPorTagHierarquicoProps {
   nodes: TagSpendingNode[];
@@ -159,8 +161,10 @@ export function GastosPorTagHierarquico({
   gastos,
   tags,
 }: GastosPorTagHierarquicoProps) {
+  const { deleteTransacao } = useData();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [modalNode, setModalNode] = useState<TagSpendingNode | null>(null);
+  const [editingTransacao, setEditingTransacao] = useState<Transacao | null>(null);
 
   const handleTagClick = (node: TagSpendingNode) => {
     setModalNode(node);
@@ -202,7 +206,10 @@ export function GastosPorTagHierarquico({
       {modalNode && (
         <div
           className="modal-overlay"
-          onClick={() => setModalNode(null)}
+          onClick={() => {
+            setModalNode(null);
+            setEditingTransacao(null);
+          }}
         >
           <div
             className="modal-content-centered w-full max-w-md overflow-hidden flex flex-col rounded-xl glass shadow-xl"
@@ -217,7 +224,10 @@ export function GastosPorTagHierarquico({
               </h4>
               <button
                 type="button"
-                onClick={() => setModalNode(null)}
+                onClick={() => {
+                  setModalNode(null);
+                  setEditingTransacao(null);
+                }}
                 className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 shrink-0"
               >
                 <X size={20} />
@@ -241,9 +251,31 @@ export function GastosPorTagHierarquico({
                             {formatLocalDate(t.data, { day: "2-digit", month: "short" })} • {t.conta}
                           </p>
                         </div>
-                        <span className="text-red-400 font-medium shrink-0">
-                          {formatBRL(Math.abs(t.valor))}
-                        </span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-red-400 font-medium">
+                            {formatBRL(Math.abs(t.valor))}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setEditingTransacao(t)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-brand-400 hover:bg-brand-500/10 transition-colors"
+                            title="Editar"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm("Excluir esta transação?")) {
+                                deleteTransacao(t.id);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            title="Excluir"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </li>
                     ))}
                 </ul>
@@ -254,6 +286,37 @@ export function GastosPorTagHierarquico({
               >
                 Ver todas na página de transações →
               </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingTransacao && (
+        <div
+          className="fixed inset-0 z-[60] p-4 bg-black/60"
+          onClick={() => setEditingTransacao(null)}
+        >
+          <div
+            className="fixed left-1/2 top-1/2 z-[61] w-full max-w-lg max-h-[min(85vh,calc(100dvh-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl glass shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-700/50 flex items-center justify-between">
+              <h4 className="font-semibold text-slate-200">Editar transação</h4>
+              <button
+                type="button"
+                onClick={() => setEditingTransacao(null)}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4">
+              <TransactionForm
+                transaction={editingTransacao}
+                showCancel
+                onCancel={() => setEditingTransacao(null)}
+                onSuccess={() => setEditingTransacao(null)}
+              />
             </div>
           </div>
         </div>

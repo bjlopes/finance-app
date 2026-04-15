@@ -48,6 +48,18 @@ export function filterGruposAtivos(
   );
 }
 
+/** Grupos em que todas as parcelas já “venceram” (vencimento da fatura antes de hoje) */
+export function filterGruposEncerrados(
+  grupos: [string, Transacao[]][],
+  getDataVencimento: (t: Transacao) => string
+): [string, Transacao[]][] {
+  const hoje = getLocalDateString();
+  return grupos.filter(
+    ([, parcelas]) =>
+      parcelas.length > 0 && parcelas.every((p) => getDataVencimento(p) < hoje)
+  );
+}
+
 export function isParcelada(descricao: string): boolean {
   return parseParcela(descricao) !== null;
 }

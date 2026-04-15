@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Plus, Trash2, Pencil, ChevronDown, ChevronRight, Check, Tags, ListFilter, X } from "lucide-react";
 import { TransactionForm } from "@/components/TransactionForm";
@@ -16,8 +17,14 @@ import {
 } from "@/lib/tags-utils";
 import { formatLocalDate, getLocalDateString } from "@/lib/dateUtils";
 import { DateRangePicker } from "@/components/DateRangePicker";
-import { groupParceladas, isParcelada, filterGruposAtivos, parseParcela } from "@/lib/parcelas-utils";
-import { getDataVencimentoFatura } from "@/lib/fluxoCaixa";
+import {
+  groupParceladas,
+  isParcelada,
+  filterGruposAtivos,
+  filterGruposEncerrados,
+  parseParcela,
+} from "@/lib/parcelas-utils";
+import { getDataVencimentoFatura, getMesEfetivo } from "@/lib/fluxoCaixa";
 import type { Transacao } from "@/types";
 
 export default function TransacoesPage() {
@@ -39,6 +46,7 @@ export default function TransacoesPage() {
   const [filterConta, setFilterConta] = useState<string | null>(null);
   const [expandedParceladaKey, setExpandedParceladaKey] = useState<string | null>(null);
   const [parceladasModalOpen, setParceladasModalOpen] = useState(false);
+  const [parceladasTab, setParceladasTab] = useState<"ativas" | "encerradas">("ativas");
   const subtagDropdownRef = useRef<HTMLDivElement>(null);
 
   const RECENT_DAYS = 30;
@@ -61,6 +69,13 @@ export default function TransacoesPage() {
   }, [searchParams, tags]);
 
   useEffect(() => {
+    const contaFromUrl = searchParams.get("conta");
+    if (contaFromUrl && contas.some((c) => c.nome === contaFromUrl)) {
+      setFilterConta(contaFromUrl);
+    }
+  }, [searchParams, contas]);
+
+  useEffect(() => {
     if (filterTagId && includeSubtags && subtagsDaTag.length > 0) {
       setSelectedSubtagIds(subtagsDaTag.map((t) => t.id));
     } else {
@@ -78,9 +93,12 @@ export default function TransacoesPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const mesEfetivoUrl = searchParams.get("mesEfetivo");
+  const mesEfetivoUrlOk = mesEfetivoUrl != null && /^\d{4}-\d{2}$/.test(mesEfetivoUrl);
+
   const transacoesFiltradas = useMemo(() => {
     let list = transacoes;
-    if (!showAll) {
+    if (!mesEfetivoUrlOk && !showAll) {
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() - RECENT_DAYS);
       const [cy, cm, cd] = [cutoff.getFullYear(), cutoff.getMonth() + 1, cutoff.getDate()];
@@ -111,8 +129,25 @@ export default function TransacoesPage() {
     if (filterConta) {
       list = list.filter((t) => t.conta === filterConta);
     }
+    if (mesEfetivoUrlOk && mesEfetivoUrl != null) {
+      list = list.filter((t) => getMesEfetivo(t, contas) === mesEfetivoUrl);
+    }
     return list;
-  }, [transacoes, showAll, filterTagId, tags, includeSubtags, selectedSubtagIds, searchDesc, filterDataDe, filterDataAte, filterConta]);
+  }, [
+    transacoes,
+    showAll,
+    mesEfetivoUrlOk,
+    mesEfetivoUrl,
+    filterTagId,
+    tags,
+    includeSubtags,
+    selectedSubtagIds,
+    searchDesc,
+    filterDataDe,
+    filterDataAte,
+    filterConta,
+    contas,
+  ]);
 
   const totalFiltrado = useMemo(
     () => transacoesFiltradas.reduce((s, t) => s + t.valor, 0),
@@ -134,13 +169,26 @@ export default function TransacoesPage() {
     };
   }, [transacoesFiltradas]);
 
-  const parceladasGruposAtivos = useMemo(() => {
+  const parceladasTodosOrdenados = useMemo(() => {
     const grupos = groupParceladas(transacoes);
-    const entries = Array.from(grupos.entries()).sort(
-      ([, a], [, b]) => (b[0]?.data ?? "").localeCompare(a[0]?.data ?? "")
+    return Array.from(grupos.entries()).sort(([, a], [, b]) =>
+      (b[0]?.data ?? "").localeCompare(a[0]?.data ?? "")
     );
-    return filterGruposAtivos(entries, (t) => getDataVencimentoFatura(t, contas));
-  }, [transacoes, contas]);
+  }, [transacoes]);
+
+  const vencimento = useCallback((t: Transacao) => getDataVencimentoFatura(t, contas), [contas]);
+
+  const parceladasGruposAtivos = useMemo(
+    () => filterGruposAtivos(parceladasTodosOrdenados, vencimento),
+    [parceladasTodosOrdenados, vencimento]
+  );
+
+  const parceladasGruposEncerrados = useMemo(
+    () => filterGruposEncerrados(parceladasTodosOrdenados, vencimento),
+    [parceladasTodosOrdenados, vencimento]
+  );
+
+  const parceladasGruposNaAba = parceladasTab === "ativas" ? parceladasGruposAtivos : parceladasGruposEncerrados;
 
   const openNewForm = () => {
     setEditingTransaction(null);
@@ -218,12 +266,7 @@ export default function TransacoesPage() {
             className="modal-content-centered glass rounded-xl p-6 w-full max-w-lg overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <TransactionForm
-              transacoes={transacoes}
-              onSuccess={closeForm}
-              showCancel
-              onCancel={closeForm}
-            />
+            <TransactionForm onSuccess={closeForm} showCancel onCancel={closeForm} />
           </div>
         </div>
       )}
@@ -278,6 +321,26 @@ export default function TransacoesPage() {
             </select>
           </div>
           </div>
+          {mesEfetivoUrlOk && mesEfetivoUrl && (
+            <p className="text-xs text-amber-400/90 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>
+                Filtro do dashboard: mês contábil <span className="font-mono">{mesEfetivoUrl}</span>
+                {filterConta ? ` · conta ${filterConta}` : ""}.
+              </span>
+              <Link
+                href={(() => {
+                  const p = new URLSearchParams();
+                  if (filterConta) p.set("conta", filterConta);
+                  if (filterTagId) p.set("tag", filterTagId);
+                  const q = p.toString();
+                  return q ? `/transacoes?${q}` : "/transacoes";
+                })()}
+                className="text-brand-400 hover:underline whitespace-nowrap"
+              >
+                Remover mês contábil
+              </Link>
+            </p>
+          )}
           {filterTagId && tagHasSubtags(filterTagId, tags) && (
             <div className="flex flex-wrap items-center gap-2">
               <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none">
@@ -399,21 +462,37 @@ export default function TransacoesPage() {
                 Editar tags em massa ({transacoesFiltradas.length})
               </button>
             )}
-            {parceladasGruposAtivos.length > 0 && (
+            {(parceladasGruposAtivos.length > 0 || parceladasGruposEncerrados.length > 0) && (
               <button
                 type="button"
-                onClick={() => setParceladasModalOpen(true)}
+                onClick={() => {
+                  setParceladasTab(parceladasGruposAtivos.length > 0 ? "ativas" : "encerradas");
+                  setExpandedParceladaKey(null);
+                  setParceladasModalOpen(true);
+                }}
                 className="flex items-center gap-2 min-h-[36px] px-3 py-2 rounded-lg text-sm text-slate-300 hover:text-slate-100 hover:bg-slate-700/50 border border-slate-600"
               >
                 <ChevronDown size={16} />
-                Ver parceladas ({parceladasGruposAtivos.length})
+                Parceladas
+                {parceladasGruposAtivos.length > 0 && (
+                  <span className="text-slate-500">
+                    ({parceladasGruposAtivos.length} em aberto
+                    {parceladasGruposEncerrados.length > 0
+                      ? ` · ${parceladasGruposEncerrados.length} encerradas`
+                      : ""}
+                    )
+                  </span>
+                )}
+                {parceladasGruposAtivos.length === 0 && parceladasGruposEncerrados.length > 0 && (
+                  <span className="text-slate-500">({parceladasGruposEncerrados.length} encerradas)</span>
+                )}
               </button>
             )}
           </div>
         </div>
         {transacoesFiltradas.length === 0 ? (
           <div className="p-12 text-center text-slate-500">
-            {filterTagId || filterConta || searchDesc.trim()
+            {filterTagId || filterConta || searchDesc.trim() || mesEfetivoUrlOk
               ? "Nenhuma transação encontrada com os filtros aplicados."
               : "Nenhuma transação ainda. Clique em \"Nova\" para começar."}
           </div>
@@ -427,7 +506,6 @@ export default function TransacoesPage() {
                   <li key={t.id} className="p-4">
                     <TransactionForm
                       transaction={t}
-                      transacoes={transacoes}
                       onSuccess={closeForm}
                       showCancel
                       onCancel={closeForm}
@@ -528,7 +606,12 @@ export default function TransacoesPage() {
               );
             })}
           </ul>
-          {(filterTagId || filterConta || filterDataDe || filterDataAte || searchDesc.trim()) && (
+          {(filterTagId ||
+            filterConta ||
+            filterDataDe ||
+            filterDataAte ||
+            searchDesc.trim() ||
+            mesEfetivoUrlOk) && (
             <div className="p-4 border-t border-slate-700/50 flex justify-between items-center bg-slate-800/30">
               <span className="font-medium text-slate-300">
                 Total ({transacoesFiltradas.length} transações)
@@ -612,8 +695,43 @@ export default function TransacoesPage() {
                 <X size={20} />
               </button>
             </div>
+            <div className="flex shrink-0 border-b border-slate-700/50 px-2 gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setParceladasTab("ativas");
+                  setExpandedParceladaKey(null);
+                }}
+                className={`flex-1 py-2.5 text-sm font-medium transition-colors rounded-t-lg ${
+                  parceladasTab === "ativas"
+                    ? "text-brand-400 border-b-2 border-brand-400 bg-slate-900/30"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Em aberto ({parceladasGruposAtivos.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setParceladasTab("encerradas");
+                  setExpandedParceladaKey(null);
+                }}
+                className={`flex-1 py-2.5 text-sm font-medium transition-colors rounded-t-lg ${
+                  parceladasTab === "encerradas"
+                    ? "text-brand-400 border-b-2 border-brand-400 bg-slate-900/30"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Encerradas ({parceladasGruposEncerrados.length})
+              </button>
+            </div>
             <ul className="divide-y divide-slate-700/30 overflow-y-auto flex-1 min-h-0">
-              {parceladasGruposAtivos.map(([groupKey, parcelas]) => {
+              {parceladasGruposNaAba.length === 0 ? (
+                <li className="p-8 text-center text-slate-500 text-sm">
+                  Nenhuma compra parcelada nesta aba.
+                </li>
+              ) : null}
+              {parceladasGruposNaAba.map(([groupKey, parcelas]) => {
                 const baseDesc = parcelas[0] ? parcelas[0].descricao.replace(/\s+\d+\/\d+$/, "") : "";
                 const totalValor = parcelas.reduce((s, p) => s + p.valor, 0);
                 const isExpanded = expandedParceladaKey === groupKey;
@@ -623,7 +741,6 @@ export default function TransacoesPage() {
                     <li key={groupKey} className="p-4">
                       <TransactionForm
                         transaction={editingTransaction}
-                        transacoes={transacoes}
                         onSuccess={closeForm}
                         showCancel
                         onCancel={closeForm}
@@ -682,7 +799,7 @@ export default function TransacoesPage() {
                             e.stopPropagation();
                             if (confirm(`Excluir todas as ${parcelas.length} parcelas?`)) {
                               parcelas.forEach((p) => deleteTransacao(p.id));
-                              if (parceladasGruposAtivos.length <= 1) setParceladasModalOpen(false);
+                              if (parceladasGruposNaAba.length <= 1) setParceladasModalOpen(false);
                             }
                           }}
                           className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
@@ -707,7 +824,6 @@ export default function TransacoesPage() {
                               <div key={p.id} className="p-4 pl-12">
                                 <TransactionForm
                                   transaction={p}
-                                  transacoes={transacoes}
                                   onSuccess={closeForm}
                                   showCancel
                                   onCancel={closeForm}

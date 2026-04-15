@@ -35,13 +35,10 @@ function findParcelasRelacionadas(
 
 interface TransactionFormProps {
   transaction?: Transacao;
-  transacoes?: Transacao[];
   onSuccess?: () => void;
   showCancel?: boolean;
   onCancel?: () => void;
 }
-
-const EMPTY_TRANSACTIONS: Transacao[] = [];
 
 function distribuirValor(total: number, n: number): number[] {
   if (n <= 0) return [];
@@ -66,7 +63,8 @@ function transactionToForm(
   t: Transacao,
   parcelasRelacionadas: Transacao[] = []
 ) {
-  const isParcelada = parcelasRelacionadas.length > 1;
+  const nRel = parcelasRelacionadas.length;
+  const isParcelada = nRel > 1;
   const parsed = parseParcela(t.descricao);
   const baseDesc = parsed?.base ?? t.descricao;
   const totalValor = isParcelada
@@ -79,6 +77,14 @@ function transactionToForm(
     ? parcelasRelacionadas[0]?.data ?? t.data
     : t.data;
 
+  /** Quantidade de parcelas no formulário: alinha com as linhas reais quando falta parcela ou sufixo diverge */
+  const parcelasCount =
+    isParcelada && parsed?.total != null && parsed.total === nRel
+      ? parsed.total
+      : isParcelada
+        ? nRel
+        : parsed?.total ?? 2;
+
   return {
     descricao: baseDesc,
     valor: Math.round(totalValor * 100).toString(),
@@ -87,7 +93,7 @@ function transactionToForm(
     data: primeiraData,
     tagIds: t.tagIds,
     parcelada: false,
-    parcelas: parsed?.total ?? 2,
+    parcelas: parcelasCount,
     receita: t.valor >= 0,
     comentario: t.comentario ?? "",
   };
@@ -119,7 +125,6 @@ function buildAutofillMap(transacoes: Transacao[]): Map<string, AutofillSuggesti
 
 function TransactionFormInner({
   transaction,
-  transacoes = EMPTY_TRANSACTIONS,
   onSuccess,
   showCancel = false,
   onCancel,
@@ -128,11 +133,20 @@ function TransactionFormInner({
 
   const parcelasRelacionadas = useMemo(
     () =>
-      transaction && transacoes.length > 0
-        ? findParcelasRelacionadas(transaction, transacoes)
+      transaction && allTransacoes.length > 0
+        ? findParcelasRelacionadas(transaction, allTransacoes)
         : [],
-    [transaction?.id, transacoes]
+    [transaction?.id, allTransacoes]
   );
+
+  const parcelasFingerprint = useMemo(
+    () =>
+      parcelasRelacionadas
+        .map((p) => `${p.id}:${p.valor}:${p.descricao}:${p.data}`)
+        .join("|"),
+    [parcelasRelacionadas]
+  );
+
   const isEdicaoParcelada = parcelasRelacionadas.length > 1;
 
   const [form, setForm] = useState({
@@ -213,7 +227,7 @@ function TransactionFormInner({
   useEffect(() => {
     if (!transaction) return;
     setForm(transactionToForm(transaction, parcelasRelacionadas));
-  }, [transaction?.id, parcelasRelacionadas]);
+  }, [transaction?.id, parcelasFingerprint]);
 
   const mostraParcelas =
     (form.parcelada && !transaction) || isEdicaoParcelada;
@@ -225,11 +239,12 @@ function TransactionFormInner({
       numParcelas >= 2 &&
       (form.valorParcelas.length !== numParcelas || form.valorParcelas.length === 0)
     ) {
+      const brlFromValorField = form.valor ? parseInt(form.valor, 10) / 100 : 0;
       const total =
-        form.valorParcelas.length > 0
-          ? form.valorParcelas.reduce((s, v) => s + v, 0)
-          : form.valor
-            ? parseInt(form.valor, 10) / 100
+        brlFromValorField > 0
+          ? brlFromValorField
+          : form.valorParcelas.length > 0
+            ? form.valorParcelas.reduce((s, v) => s + v, 0)
             : 0;
       if (total > 0) {
         setForm((f) => ({
@@ -244,26 +259,10 @@ function TransactionFormInner({
     const parts = form.data?.split("-");
     if (!parts || parts.length !== 3) return form.data ?? "";
     const [y, m, d] = parts.map(Number);
-    const conta = contas.find((c) => c.nome === form.conta);
 
     if (parcelaIndex === 0) return form.data;
 
-    if (conta?.isCartaoCredito && conta.dataFechamento != null) {
-      const aposFechamento = d >= conta.dataFechamento;
-      const offsetMes = aposFechamento ? 1 : 0;
-      const mesBilling = new Date(y, m - 1 + parcelaIndex + offsetMes, 1);
-      const primeiroDiaPeriodo = new Date(
-        mesBilling.getFullYear(),
-        mesBilling.getMonth() - 1,
-        conta.dataFechamento
-      );
-      const yy = primeiroDiaPeriodo.getFullYear();
-      const mm = primeiroDiaPeriodo.getMonth() + 1;
-      const ultimoDia = new Date(yy, mm, 0).getDate();
-      const dd = Math.min(conta.dataFechamento, ultimoDia);
-      return `${yy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
-    }
-
+    // Um mês por parcela a partir da 1ª; fatura do cartão vem de getMesEfetivo (fluxoCaixa).
     const mesAno = new Date(y, m - 1 + parcelaIndex, 1);
     const ultimoDia = new Date(
       mesAno.getFullYear(),

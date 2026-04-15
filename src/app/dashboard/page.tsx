@@ -50,6 +50,7 @@ export default function DashboardPage() {
   const [contasDashboard, setContasDashboard] = useState<string[] | null>(null);
   const [contasDropdownOpen, setContasDropdownOpen] = useState(false);
   const [receitasModalOpen, setReceitasModalOpen] = useState(false);
+  const [contaSaldoModal, setContaSaldoModal] = useState<string | null>(null);
   const contasDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -131,6 +132,23 @@ export default function DashboardPage() {
       totalTransacoes: transacoes.length,
     };
   }, [transacoes, tags, contas, mesSelecionado, contasAtivas]);
+
+  const transacoesContaSaldoDetalhe = useMemo(() => {
+    if (!contaSaldoModal) return [];
+    return transacoes
+      .filter(
+        (t) =>
+          getMesEfetivo(t, contas) === mesSelecionado &&
+          contasAtivas.includes(t.conta) &&
+          t.conta === contaSaldoModal
+      )
+      .sort((a, b) => b.data.localeCompare(a.data));
+  }, [contaSaldoModal, transacoes, contas, mesSelecionado, contasAtivas]);
+
+  const saldoContaModal = useMemo(
+    () => transacoesContaSaldoDetalhe.reduce((s, t) => s + t.valor, 0),
+    [transacoesContaSaldoDetalhe]
+  );
 
   const formatBRL = (n: number) =>
     new Intl.NumberFormat("pt-BR", {
@@ -340,16 +358,22 @@ export default function DashboardPage() {
             {stats.topContas.length > 0 && (
               <div className="pt-2 border-t border-slate-700/50">
                 <h3 className="text-slate-300 font-medium mb-3">Saldo por conta</h3>
-                <ul className="space-y-2">
+                <p className="text-xs text-slate-500 mb-2">
+                  Toque em uma conta para ver as transações que compõem o saldo deste mês.
+                </p>
+                <ul className="space-y-1">
                   {stats.topContas.map(([conta, saldo]) => (
-                    <li
-                      key={conta}
-                      className="flex justify-between text-sm text-slate-400"
-                    >
-                      <span>{conta}</span>
-                      <span className={`font-medium ${saldo >= 0 ? "text-brand-400" : "text-red-400"}`}>
-                        {formatBRL(saldo)}
-                      </span>
+                    <li key={conta}>
+                      <button
+                        type="button"
+                        onClick={() => setContaSaldoModal(conta)}
+                        className="flex w-full justify-between items-center gap-2 text-sm text-slate-400 rounded-lg px-2 py-2.5 text-left hover:bg-slate-800/50 active:bg-slate-800/70 transition-colors min-h-[44px]"
+                      >
+                        <span className="truncate text-slate-300">{conta}</span>
+                        <span className={`font-medium shrink-0 ${saldo >= 0 ? "text-brand-400" : "text-red-400"}`}>
+                          {formatBRL(saldo)}
+                        </span>
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -417,6 +441,76 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {contaSaldoModal && (
+        <div
+          className="modal-overlay"
+          onClick={() => setContaSaldoModal(null)}
+        >
+          <div
+            className="modal-content-centered w-full max-w-md overflow-hidden flex flex-col rounded-xl glass shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0 gap-2">
+              <div className="min-w-0">
+                <h4 className="font-semibold text-slate-200 truncate">{contaSaldoModal}</h4>
+                <p className="text-xs text-slate-500 mt-0.5">{stats.mesLabel}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setContaSaldoModal(null)}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 shrink-0"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <p className="px-4 pt-3 text-xs text-slate-500 leading-relaxed">
+              Mesmo critério do saldo do dashboard (mês contábil; cartão de crédito usa a fatura).
+            </p>
+            <div className="overflow-y-auto flex-1 min-h-0 p-4 pt-2">
+              {transacoesContaSaldoDetalhe.length === 0 ? (
+                <p className="text-slate-500 text-sm">Nenhuma transação nesta conta para este mês.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {transacoesContaSaldoDetalhe.map((t) => (
+                    <li
+                      key={t.id}
+                      className="flex justify-between items-start gap-2 py-2 border-b border-slate-700/30 last:border-0"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-slate-200 truncate">{t.descricao}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {formatLocalDate(t.data, { day: "2-digit", month: "short" })}
+                        </p>
+                      </div>
+                      <span
+                        className={`font-medium shrink-0 ${
+                          t.valor >= 0 ? "text-brand-400" : "text-red-400"
+                        }`}
+                      >
+                        {formatBRL(t.valor)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="mt-4 pt-3 border-t border-slate-700/40 flex justify-between text-sm">
+                <span className="text-slate-400">Saldo no mês</span>
+                <span className={saldoContaModal >= 0 ? "text-brand-400 font-semibold" : "text-red-400 font-semibold"}>
+                  {formatBRL(saldoContaModal)}
+                </span>
+              </div>
+              <Link
+                href={`/transacoes?conta=${encodeURIComponent(contaSaldoModal)}&mesEfetivo=${encodeURIComponent(mesSelecionado)}`}
+                onClick={() => setContaSaldoModal(null)}
+                className="mt-3 block text-center text-sm text-brand-400 hover:text-brand-300"
+              >
+                Abrir na página Transações (editar, exportar) →
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {receitasModalOpen && (
         <div
