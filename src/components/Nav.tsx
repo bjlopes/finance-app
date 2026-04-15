@@ -37,7 +37,7 @@ export function Nav() {
   return (
     <>
       <nav className="sticky top-0 z-50 glass border-b border-slate-700/50 pt-[env(safe-area-inset-top)]">
-        <div className="max-w-[min(100%,56rem)] tablet:max-w-[min(100%,56rem)] lg:max-w-[min(100%,72rem)] ipad:max-w-[min(100%,75rem)] mx-auto px-4 tablet:px-6 lg:px-8 ipad:px-8 py-3">
+        <div className="max-w-[min(100%,56rem)] tablet:max-w-[min(100%,56rem)] lg:max-w-[min(100%,72rem)] ipad:max-w-[min(100%,min(78rem,calc(100vw-1.5rem)))] mx-auto px-4 tablet:px-6 lg:px-8 ipad:px-8 py-3 phone:py-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               {showNavLinks && (
@@ -127,7 +127,7 @@ export function Nav() {
       )}
       {showNavLinks && (
       <div
-        className={`fixed top-0 left-0 z-[70] h-full w-[min(280px,85vw)] max-w-[280px] bg-slate-900 border-r border-slate-700/50 shadow-xl transition-transform duration-200 ease-out pt-[env(safe-area-inset-top)] tablet:hidden ${
+        className={`fixed top-0 left-0 z-[70] flex h-[100dvh] min-h-[100dvh] w-[min(280px,min(85vw,calc(100vw-env(safe-area-inset-left,0px)-0.5rem)))] max-w-[280px] flex-col bg-slate-900 border-r border-slate-700/50 shadow-xl transition-transform duration-200 ease-out pt-[env(safe-area-inset-top)] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] pl-[env(safe-area-inset-left,0px)] tablet:hidden ${
           menuOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -142,7 +142,7 @@ export function Nav() {
             <X size={24} />
           </button>
         </div>
-        <nav className="p-4">
+        <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4">
           <ul className="space-y-1">
             {links.map(({ href, label, icon: Icon }) => {
               const isActive =

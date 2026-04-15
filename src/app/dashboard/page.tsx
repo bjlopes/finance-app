@@ -174,7 +174,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ipad:gap-4">
+      <div className="flex flex-col gap-3 phone:gap-2.5 sm:flex-row sm:items-center sm:justify-between ipad:gap-4">
         <div>
           <h1 className="text-[length:var(--fluid-text-2xl)] font-bold text-slate-100">Dashboard</h1>
           <p className="text-[length:var(--fluid-text-sm)] text-slate-400 mt-1">{stats.mesLabel}</p>
@@ -266,8 +266,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="glass rounded-xl p-5 tablet:p-6">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr,auto] lg:items-start lg:gap-8 ipad:grid-cols-[1fr,minmax(260px,320px)] ipad:gap-10">
+      <div className="glass rounded-xl p-5 phone:p-4 tablet:p-6">
+        <div className="grid grid-cols-1 gap-6 phone:gap-4 lg:grid-cols-[1fr,auto] lg:items-start lg:gap-8 ipad:grid-cols-[1fr,minmax(260px,320px)] ipad:gap-10">
           {/* Coluna esquerda: Fluxo + Gastos por tag + conta + maiores (uma coluna só no iPad landscape) */}
           <div className="space-y-6 lg:pr-6 lg:border-r lg:border-slate-700/50 lg:min-w-0 ipad:pr-8 ipad:min-w-0">
             <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-700/50 pb-3">

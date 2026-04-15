@@ -9,8 +9,15 @@ const config: Config = {
   theme: {
     extend: {
       screens: {
+        /** iPad / large tablet portrait (e.g. 11" width 834pt) */
         tablet: "834px",
-        ipad: "1210px",
+        /**
+         * Wide layout: iPad Pro 11" (M4) landscape ~1194 CSS px, mini ~1133.
+         * Keep min-width below 1210 so 11" Pro actually matches in Safari PWA.
+         */
+        ipad: "1152px",
+        /** iPhone 17 / 17 Pro (not Pro Max) portrait and similar narrow phones (~402 CSS px wide) */
+        phone: { max: "430px" },
       },
       fontFamily: {
         sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],

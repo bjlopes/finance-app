@@ -4,6 +4,16 @@
 
 @layer base {
   :root {
+    /*
+     * Reference device (portrait, CSS px): iPhone 17 / 17 Pro (not Pro Max) — 402 × 874 @3x
+     * (Dynamic Island; use env(safe-area-inset-*) for notches / home indicator.)
+     * Landscape 17 Pro: larger side insets (~62pt) per Apple HIG — still covered by env().
+     */
+    --ref-phone-viewport-w: 402;
+    --ref-phone-viewport-h: 874;
+    /* iPad Pro 11" (M4) landscape — ~1194 × 834 CSS px @2x logical */
+    --ref-ipad-11-landscape-w: 1194;
+
     --bg: #0a0f1a;
     --bg-card: #111827;
     --accent: #22c55e;
@@ -73,9 +83,13 @@
     margin-inline: auto;
     padding-inline: var(--fluid-space);
   }
-  /* Modal centered in viewport (not scroll), works when page is scrolled */
+  /* Modal: full screen + padding respects safe areas (iPhone 17 Pro, Island, home bar) */
   .modal-overlay {
-    @apply fixed inset-0 z-50 p-4 bg-black/60;
+    @apply fixed inset-0 z-50 bg-black/60;
+    padding: max(1rem, env(safe-area-inset-top, 0px))
+      max(1rem, env(safe-area-inset-right, 0px))
+      max(1rem, env(safe-area-inset-bottom, 0px))
+      max(1rem, env(safe-area-inset-left, 0px));
   }
   .modal-content-centered {
     position: fixed;
@@ -83,6 +97,34 @@
     left: 50%;
     transform: translate(-50%, -50%);
     z-index: 51;
-    max-height: min(85vh, calc(100dvh - 2rem));
+    max-height: min(
+      85dvh,
+      calc(
+        100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 2rem
+      )
+    );
+    max-width: min(100%, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 2rem));
+  }
+
+  /* iPhone landscape / short height: modals use more vertical space */
+  @media (max-height: 480px) and (orientation: landscape) {
+    .modal-content-centered {
+      max-height: min(
+        92dvh,
+        calc(
+          100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 0.5rem
+        )
+      );
+    }
+  }
+
+  /* iPad Pro 11"+ landscape: allow slightly wider dialogs */
+  @media (min-width: 1152px) and (orientation: landscape) {
+    .modal-content-centered {
+      max-width: min(
+        48rem,
+        calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 2.5rem)
+      );
+    }
   }
 }

@@ -28,11 +28,15 @@ All notable changes to this project will be documented in this file.
   - Parcelas count input uses `inputMode="numeric"` when custom value (13+)
 
 - **iPad Pro 11" M4 landscape optimization**
-  - New `ipad` breakpoint at 1210px (landscape viewport width)
-  - Wider content area (75rem) and increased padding on iPad
+  - `ipad` breakpoint at **1152px** so 11" landscape (~1194 CSS px) matches; wider main/nav max width up to **78rem** when viewport allows
   - Dashboard: two-column grid with fixed donut chart column (260–320px)
-  - Transações: improved filter grid spacing and padding
-  - Contas/Tags: increased card padding
+  - Transações / Contas / Tags: improved filter grid spacing and padding on tablet and iPad
+
+- **Layout & devices (iPhone 17 Pro portrait, iPad 11" Pro landscape)**
+  - New `phone` (`max-width: 430px`) utilities for tighter padding on narrow phones (17 / 17 Pro, not Pro Max — ~402 CSS px wide)
+  - Modals: safe-area padding on overlay; max height/width uses `dvh` and `env(safe-area-inset-*)`; short-landscape and iPad-landscape tweaks for dialog size
+  - Nav: aligned max width with main on iPad; mobile drawer uses `100dvh`, scrollable link list, safe-area left/bottom insets, width capped near the notch in landscape
+  - `layout`: `text-size-adjust`; `phone:` vertical rhythm on main and key screens
 
 - **Tag hierarchy (3 levels)**
   - Tags support subtags and sub-subtags (tag › subtag › sub-subtag)
