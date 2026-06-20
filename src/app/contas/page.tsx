@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, Pencil, CreditCard } from "lucide-react";
+import { Plus, Trash2, Pencil, CreditCard, TrendingUp } from "lucide-react";
 import { useData } from "@/context/DataContext";
 import type { ContaItem } from "@/context/DataContext";
 
@@ -12,12 +12,14 @@ export default function ContasPage() {
   const [editingConta, setEditingConta] = useState<ContaItem | null>(null);
   const [formNome, setFormNome] = useState("");
   const [formCartaoCredito, setFormCartaoCredito] = useState(false);
+  const [formInvestimento, setFormInvestimento] = useState(false);
   const [formDataFechamento, setFormDataFechamento] = useState<number>(10);
 
   const openNewForm = () => {
     setEditingConta(null);
     setFormNome("");
     setFormCartaoCredito(false);
+    setFormInvestimento(false);
     setFormDataFechamento(10);
     setShowForm(true);
   };
@@ -26,6 +28,7 @@ export default function ContasPage() {
     setEditingConta(conta);
     setFormNome(conta.nome);
     setFormCartaoCredito(conta.isCartaoCredito ?? false);
+    setFormInvestimento(conta.isInvestimento ?? false);
     setFormDataFechamento(conta.dataFechamento ?? 10);
   };
 
@@ -40,17 +43,20 @@ export default function ContasPage() {
           nome,
           isCartaoCredito: formCartaoCredito,
           dataFechamento: formCartaoCredito ? formDataFechamento : undefined,
+          isInvestimento: formInvestimento,
         }
       : {
           id: crypto.randomUUID(),
           nome,
           isCartaoCredito: formCartaoCredito,
           dataFechamento: formCartaoCredito ? formDataFechamento : undefined,
+          isInvestimento: formInvestimento,
         };
 
     saveConta(conta);
     setFormNome("");
     setFormCartaoCredito(false);
+    setFormInvestimento(false);
     setFormDataFechamento(10);
     setShowForm(false);
     setEditingConta(null);
@@ -144,6 +150,18 @@ export default function ContasPage() {
               </select>
             </div>
           )}
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="contaInvestimento"
+              checked={formInvestimento}
+              onChange={(e) => setFormInvestimento(e.target.checked)}
+              className="rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500"
+            />
+            <label htmlFor="contaInvestimento" className="text-sm text-slate-400 cursor-pointer">
+              Conta de investimento (aportes e resgates no dashboard)
+            </label>
+          </div>
           <div className="flex gap-2">
             <button
               type="submit"
@@ -208,6 +226,15 @@ export default function ContasPage() {
                       ))}
                     </select>
                   )}
+                  <label className="flex items-center gap-1.5 text-sm text-slate-400 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formInvestimento}
+                      onChange={(e) => setFormInvestimento(e.target.checked)}
+                      className="rounded border-slate-600 bg-slate-800 text-brand-500"
+                    />
+                    Inv.
+                  </label>
                   <button
                     type="submit"
                     className="px-3 py-1.5 rounded-lg bg-brand-500 text-white text-sm font-medium"
@@ -235,6 +262,15 @@ export default function ContasPage() {
                     >
                       <CreditCard size={12} />
                       {conta.dataFechamento ? `Dia ${conta.dataFechamento}` : "CC"}
+                    </span>
+                  )}
+                  {conta.isInvestimento && (
+                    <span
+                      className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                      title="Transferências para/de esta conta aparecem como aporte/resgate"
+                    >
+                      <TrendingUp size={12} />
+                      Invest.
                     </span>
                   )}
                   <button

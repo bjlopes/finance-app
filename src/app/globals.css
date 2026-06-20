@@ -39,7 +39,8 @@
     color: var(--text);
     min-height: 100vh;
     min-height: 100dvh;
-    padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+    /* safe areas: Nav (top), main (sides/bottom) — evita padding duplo */
+    padding: 0;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
   }

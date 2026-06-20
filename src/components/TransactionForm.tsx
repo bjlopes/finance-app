@@ -7,7 +7,12 @@ import { CurrencyInput } from "@/components/CurrencyInput";
 import { getTagPath } from "@/lib/tags-utils";
 import { useData } from "@/context/DataContext";
 import { getLocalDateString } from "@/lib/dateUtils";
-import { parseParcela } from "@/lib/parcelas-utils";
+import { parseParcela, distribuirValorParcelas, normalizarValoresParcelas, mapParcelasPorNumero } from "@/lib/parcelas-utils";
+import {
+  getContaDestinoTransferencia,
+  getContaOrigemTransferencia,
+  isTransferencia,
+} from "@/lib/transferencias";
 import type { Transacao } from "@/types";
 
 function findParcelasRelacionadas(
@@ -38,25 +43,6 @@ interface TransactionFormProps {
   onSuccess?: () => void;
   showCancel?: boolean;
   onCancel?: () => void;
-}
-
-function distribuirValor(total: number, n: number): number[] {
-  if (n <= 0) return [];
-  const totalCents = Math.round(total * 100);
-  const baseCents = Math.floor(totalCents / n);
-  const resto = totalCents - baseCents * n;
-
-  if (resto === 0) {
-    const valor = baseCents / 100;
-    return Array(n).fill(valor);
-  }
-
-  const valores: number[] = [];
-  valores.push((baseCents + resto) / 100);
-  for (let i = 1; i < n; i++) {
-    valores.push(baseCents / 100);
-  }
-  return valores;
 }
 
 function transactionToForm(
@@ -129,7 +115,10 @@ function TransactionFormInner({
   showCancel = false,
   onCancel,
 }: TransactionFormProps) {
-  const { tags, contas, saveTransacao, deleteTransacao, createTag, transacoes: allTransacoes } = useData();
+  const { tags, contas, saveTransacao, saveTransacoes, saveTransferencia, deleteTransacao, createTag, transacoes: allTransacoes } = useData();
+
+  const isEdicaoTransferencia =
+    Boolean(transaction && isTransferencia(transaction));
 
   const parcelasRelacionadas = useMemo(
     () =>
@@ -149,11 +138,13 @@ function TransactionFormInner({
 
   const isEdicaoParcelada = parcelasRelacionadas.length > 1;
 
+  const [modo, setModo] = useState<"normal" | "transferencia">("normal");
   const [form, setForm] = useState({
     descricao: "",
     valor: "",
     valorParcelas: [] as number[],
     conta: "",
+    contaDestino: "",
     data: getLocalDateString(),
     tagIds: [] as string[],
     parcelada: false,
@@ -210,11 +201,13 @@ function TransactionFormInner({
     }
     if (initializedNewRef.current) return;
     initializedNewRef.current = true;
+    setModo("normal");
     setForm({
       descricao: "",
       valor: "",
       valorParcelas: [],
       conta: contas[0]?.nome ?? "",
+      contaDestino: contas[1]?.nome ?? contas[0]?.nome ?? "",
       data: getLocalDateString(),
       tagIds: [],
       parcelada: false,
@@ -222,12 +215,35 @@ function TransactionFormInner({
       receita: false,
       comentario: "",
     });
-  }, [transaction?.id]);
+  }, [transaction?.id, contas]);
 
   useEffect(() => {
     if (!transaction) return;
-    setForm(transactionToForm(transaction, parcelasRelacionadas));
-  }, [transaction?.id, parcelasFingerprint]);
+    if (isTransferencia(transaction)) {
+      const origem = getContaOrigemTransferencia(transaction, allTransacoes);
+      const destino = getContaDestinoTransferencia(transaction, allTransacoes) ?? "";
+      setModo("transferencia");
+      setForm({
+        descricao: transaction.descricao,
+        valor: Math.round(Math.abs(transaction.valor) * 100).toString(),
+        valorParcelas: [],
+        conta: origem,
+        contaDestino: destino,
+        data: transaction.data,
+        tagIds: [],
+        parcelada: false,
+        parcelas: 2,
+        receita: false,
+        comentario: transaction.comentario ?? "",
+      });
+      return;
+    }
+    setModo("normal");
+    setForm({
+      ...transactionToForm(transaction, parcelasRelacionadas),
+      contaDestino: contas[1]?.nome ?? contas[0]?.nome ?? "",
+    });
+  }, [transaction?.id, parcelasFingerprint, allTransacoes]);
 
   const mostraParcelas =
     (form.parcelada && !transaction) || isEdicaoParcelada;
@@ -249,7 +265,7 @@ function TransactionFormInner({
       if (total > 0) {
         setForm((f) => ({
           ...f,
-          valorParcelas: distribuirValor(total, numParcelas),
+          valorParcelas: distribuirValorParcelas(total, numParcelas),
         }));
       }
     }
@@ -275,59 +291,99 @@ function TransactionFormInner({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (modo === "transferencia") {
+      const valor = form.valor ? parseInt(form.valor, 10) / 100 : 0;
+      if (!form.descricao.trim() || valor <= 0) return;
+      if (!form.conta || !form.contaDestino) return;
+      if (form.conta === form.contaDestino) {
+        alert("Selecione contas de origem e destino diferentes.");
+        return;
+      }
+      saveTransferencia({
+        transferenciaId: transaction?.transferenciaId,
+        descricao: form.descricao.trim(),
+        valor,
+        contaOrigem: form.conta,
+        contaDestino: form.contaDestino,
+        data: form.data,
+        comentario: form.comentario?.trim() || undefined,
+      });
+      setForm({
+        descricao: "",
+        valor: "",
+        valorParcelas: [],
+        conta: contas[0]?.nome ?? "",
+        contaDestino: contas[1]?.nome ?? contas[0]?.nome ?? "",
+        data: getLocalDateString(),
+        tagIds: [],
+        parcelada: false,
+        parcelas: 2,
+        receita: false,
+        comentario: "",
+      });
+      setModo("normal");
+      onSuccess?.();
+      return;
+    }
+
     if (form.tagIds.length === 0 && !confirm("Esta transação não tem nenhuma tag. Deseja salvar mesmo assim?")) {
       return;
     }
+    const totalBrl = form.valor ? parseInt(form.valor, 10) / 100 : 0;
+    const totalParcelas = mostraParcelas ? numParcelas : 1;
     let valores: number[];
     if (mostraParcelas) {
-      if (form.valorParcelas.length === numParcelas) {
-        valores = form.valorParcelas;
-      } else {
-        const total = form.valor
-          ? parseInt(form.valor, 10) / 100
-          : form.valorParcelas.reduce((s, v) => s + v, 0);
-        valores = distribuirValor(total, numParcelas);
-      }
+      valores = normalizarValoresParcelas(
+        form.valorParcelas,
+        totalParcelas,
+        totalBrl
+      );
     } else {
-      valores = [form.valor ? parseInt(form.valor, 10) / 100 : 0];
+      valores = [totalBrl];
     }
     const totalValor = valores.reduce((s, v) => s + v, 0);
 
     if (!form.descricao || totalValor === 0) return;
 
     const sinal = form.receita ? 1 : -1;
-    const parcelas = mostraParcelas ? valores.length : 1;
-
     const comentario = form.comentario?.trim() || undefined;
     if (form.parcelada && !transaction) {
-      for (let i = 0; i < parcelas; i++) {
-        const transacao: Transacao = {
+      const novas: Transacao[] = [];
+      for (let i = 0; i < totalParcelas; i++) {
+        novas.push({
           id: crypto.randomUUID(),
-          descricao: `${form.descricao} ${i + 1}/${parcelas}`,
-          valor: Math.round(valores[i] * 100) / 100 * sinal,
+          descricao: `${form.descricao} ${i + 1}/${totalParcelas}`,
+          valor: Math.round(valores[i]! * 100) / 100 * sinal,
           conta: form.conta,
           data: getDataParcela(i),
           tagIds: form.tagIds,
           comentario,
-        };
-        saveTransacao(transacao);
+        });
       }
+      saveTransacoes(novas);
     } else if (isEdicaoParcelada && parcelasRelacionadas.length > 0) {
-      const novoTotal = parcelas;
-      for (let i = 0; i < novoTotal; i++) {
+      const porNumero = mapParcelasPorNumero(parcelasRelacionadas);
+      const idsUsados = new Set<string>();
+      for (let i = 0; i < totalParcelas; i++) {
+        const n = i + 1;
+        const existente = porNumero.get(n);
         const transacao: Transacao = {
-          id: i < parcelasRelacionadas.length ? parcelasRelacionadas[i]!.id : crypto.randomUUID(),
-          descricao: `${form.descricao} ${i + 1}/${novoTotal}`,
-          valor: Math.round(form.valorParcelas[i]! * 100) / 100 * sinal,
+          id: existente?.id ?? crypto.randomUUID(),
+          descricao: `${form.descricao} ${n}/${totalParcelas}`,
+          valor: Math.round(valores[i]! * 100) / 100 * sinal,
           conta: form.conta,
           data: getDataParcela(i),
           tagIds: form.tagIds,
           comentario,
         };
+        idsUsados.add(transacao.id);
         saveTransacao(transacao);
       }
-      for (let i = novoTotal; i < parcelasRelacionadas.length; i++) {
-        deleteTransacao(parcelasRelacionadas[i]!.id);
+      for (const p of parcelasRelacionadas) {
+        if (!idsUsados.has(p.id)) {
+          deleteTransacao(p.id);
+        }
       }
     } else {
       const transacao: Transacao = {
@@ -347,6 +403,7 @@ function TransactionFormInner({
       valor: "",
       valorParcelas: [],
       conta: contas[0]?.nome ?? "",
+      contaDestino: contas[1]?.nome ?? contas[0]?.nome ?? "",
       data: getLocalDateString(),
       tagIds: [],
       parcelada: false,
@@ -354,6 +411,7 @@ function TransactionFormInner({
       receita: false,
       comentario: "",
     });
+    setModo("normal");
     onSuccess?.();
   };
 
@@ -361,15 +419,52 @@ function TransactionFormInner({
   return (
     <form
       onSubmit={handleSubmit}
-      className="glass rounded-xl p-6 space-y-4 min-w-0"
+      className="glass rounded-xl p-6 phone:p-5 space-y-4 min-w-0"
     >
       <h2 className="text-lg font-semibold text-slate-200">
         {transaction
-          ? isEdicaoParcelada
-            ? "Editar compra parcelada"
-            : "Editar transação"
-          : "Nova transação"}
+          ? isEdicaoTransferencia
+            ? "Editar transferência"
+            : isEdicaoParcelada
+              ? "Editar compra parcelada"
+              : "Editar transação"
+          : modo === "transferencia"
+            ? "Transferência entre contas"
+            : "Nova transação"}
       </h2>
+
+      {!transaction && !isEdicaoParcelada && (
+        <div className="flex rounded-lg border border-slate-700/60 p-0.5 bg-slate-800/40">
+          <button
+            type="button"
+            onClick={() => setModo("normal")}
+            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+              modo === "normal"
+                ? "bg-slate-700 text-slate-100"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            Receita / despesa
+          </button>
+          <button
+            type="button"
+            onClick={() => setModo("transferencia")}
+            className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors ${
+              modo === "transferencia"
+                ? "bg-slate-700 text-slate-100"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            Transferência
+          </button>
+        </div>
+      )}
+
+      {modo === "transferencia" && (
+        <p className="text-sm text-slate-400">
+          Move valor entre duas contas sem contar como receita ou despesa no dashboard.
+        </p>
+      )}
       {isEdicaoParcelada && (
         <p className="text-sm text-slate-400">
           Editando {numParcelas} parcela{numParcelas !== 1 ? "s" : ""}.
@@ -420,7 +515,7 @@ function TransactionFormInner({
                 applyAutofill(autofillSuggestions[autofillIndex]);
               }
             }}
-            placeholder="Ex: Uber, Petz, Salário..."
+            placeholder={modo === "transferencia" ? "Ex: Resgate CDB, Pix para Nubank..." : "Ex: Uber, Petz, Salário..."}
             className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
             required
           />
@@ -475,7 +570,7 @@ function TransactionFormInner({
                   setForm((f) => ({
                     ...f,
                     valor: valor,
-                    valorParcelas: distribuirValor(total, numParcelas),
+                    valorParcelas: distribuirValorParcelas(total, numParcelas),
                   }));
                 } else {
                   setForm((f) => ({ ...f, valor }));
@@ -485,6 +580,7 @@ function TransactionFormInner({
               className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
               required
             />
+            {modo === "normal" && (
             <label className="flex items-center gap-2 whitespace-nowrap cursor-pointer">
               <input
                 type="checkbox"
@@ -496,8 +592,9 @@ function TransactionFormInner({
               />
               <span className="text-sm text-slate-400">Receita</span>
             </label>
+            )}
           </div>
-          {(!transaction || isEdicaoParcelada) && (
+          {modo === "normal" && (!transaction || isEdicaoParcelada) && (
             <div className="mt-2 flex flex-wrap items-center gap-3">
               {!transaction && (
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -607,7 +704,9 @@ function TransactionFormInner({
         </div>
         <div className="min-w-0">
           <div className="flex items-center justify-between mb-1">
-            <label className="block text-sm text-slate-400">Conta</label>
+            <label className="block text-sm text-slate-400">
+              {modo === "transferencia" ? "De (origem)" : "Conta"}
+            </label>
             <Link
               href="/contas"
               className="text-xs text-slate-500 hover:text-brand-400 transition-colors"
@@ -629,7 +728,26 @@ function TransactionFormInner({
                 ))}
               </select>
         </div>
+        {modo === "transferencia" && (
+          <div className="min-w-0">
+            <label className="block text-sm text-slate-400 mb-1">Para (destino)</label>
+            <select
+              value={form.contaDestino || contas[0]?.nome}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, contaDestino: e.target.value }))
+              }
+              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+            >
+              {contas.map((c) => (
+                <option key={c.id} value={c.nome}>
+                  {c.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
+      {modo === "normal" && (
       <div className="min-w-0">
         <div className="flex items-center justify-between mb-1">
           <label className="block text-sm text-slate-400">Tags e subtags</label>
@@ -655,6 +773,7 @@ function TransactionFormInner({
           }}
         />
       </div>
+      )}
       <div className="min-w-0">
         <label className="block text-sm text-slate-400 mb-1">
           Comentário (opcional)
@@ -674,7 +793,13 @@ function TransactionFormInner({
           type="submit"
           className="px-4 py-2 rounded-lg bg-brand-500 text-white font-medium hover:bg-brand-600 active:opacity-90 cursor-pointer min-h-[44px]"
         >
-          {transaction ? "Atualizar" : "Salvar"}
+          {transaction
+            ? isEdicaoTransferencia
+              ? "Atualizar transferência"
+              : "Atualizar"
+            : modo === "transferencia"
+              ? "Registrar transferência"
+              : "Salvar"}
         </button>
         {showCancel && onCancel && (
           <button

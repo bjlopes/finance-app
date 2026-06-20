@@ -1,6 +1,12 @@
 "use client";
 
 import type { Transacao, Tag } from "@/types";
+import type { TransferenciaInput } from "@/lib/transferencias";
+import {
+  compareTransacoesDesc,
+  sortTransacoesDesc,
+  withCriadoEm,
+} from "@/lib/transacoes-utils";
 
 const STORAGE_KEY = "finance-app-data";
 const BACKUP_KEY = "finance-app-backup";
@@ -35,6 +41,7 @@ interface ContaItem {
   nome: string;
   isCartaoCredito?: boolean;
   dataFechamento?: number;
+  isInvestimento?: boolean;
 }
 
 interface StoredData {
@@ -171,18 +178,101 @@ export function saveTransacao(transacao: Transacao): void {
   const index = transacoes.findIndex((t) => t.id === transacao.id);
   const next = [...transacoes];
   if (index >= 0) {
-    next[index] = transacao;
+    const prev = transacoes[index]!;
+    next[index] = withCriadoEm(transacao, prev.criadoEm);
   } else {
-    next.push(transacao);
+    next.push(withCriadoEm(transacao));
   }
-  next.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
-  setStored({ transacoes: next, tags, contas });
+  setStored({ transacoes: sortTransacoesDesc(next), tags, contas });
+}
+
+/** Salva várias transações de uma vez (ex.: compra parcelada). Evita perder parcelas em gravações rápidas. */
+export function saveTransacoes(novas: Transacao[]): void {
+  if (novas.length === 0) return;
+  const { transacoes, tags, contas } = getStored();
+  const byId = new Map(transacoes.map((t) => [t.id, t]));
+  const base = Date.now();
+  novas.forEach((t, i) => {
+    const prev = byId.get(t.id);
+    byId.set(
+      t.id,
+      withCriadoEm(t, prev?.criadoEm ?? new Date(base + i).toISOString())
+    );
+  });
+  setStored({ transacoes: sortTransacoesDesc(Array.from(byId.values())), tags, contas });
 }
 
 export function deleteTransacao(id: string): void {
   const { transacoes, tags, contas } = getStored();
+  const alvo = transacoes.find((t) => t.id === id);
+  const idsToRemove = new Set<string>([id]);
+  if (alvo?.transferenciaId) {
+    transacoes
+      .filter((t) => t.transferenciaId === alvo.transferenciaId)
+      .forEach((t) => idsToRemove.add(t.id));
+  }
   setStored({
-    transacoes: transacoes.filter((t) => t.id !== id),
+    transacoes: transacoes.filter((t) => !idsToRemove.has(t.id)),
+    tags,
+    contas,
+  });
+}
+
+export function saveTransferencia(input: TransferenciaInput): void {
+  if (input.contaOrigem === input.contaDestino) return;
+  const valor = Math.round(Math.abs(input.valor) * 100) / 100;
+  if (valor <= 0) return;
+
+  const { transacoes, tags, contas } = getStored();
+  const transferenciaId = input.transferenciaId ?? crypto.randomUUID();
+  const existentes = transacoes.filter((t) => t.transferenciaId === transferenciaId);
+  const origemId =
+    existentes.find((t) => t.valor < 0)?.id ?? crypto.randomUUID();
+  const destinoId =
+    existentes.find((t) => t.valor > 0)?.id ?? crypto.randomUUID();
+  const comentario = input.comentario?.trim() || undefined;
+
+  const semPar = transacoes.filter((t) => t.transferenciaId !== transferenciaId);
+  const existenteOrigem = existentes.find((t) => t.valor < 0);
+  const existenteDestino = existentes.find((t) => t.valor > 0);
+  const stamp = new Date().toISOString();
+
+  const origem: Transacao = withCriadoEm(
+    {
+      id: origemId,
+      descricao: input.descricao.trim(),
+      valor: -valor,
+      conta: input.contaOrigem,
+      contaDestino: input.contaDestino,
+      data: input.data,
+      tagIds: [],
+      comentario,
+      transferenciaId,
+    },
+    existenteOrigem?.criadoEm ?? stamp
+  );
+  const destino: Transacao = withCriadoEm(
+    {
+      id: destinoId,
+      descricao: input.descricao.trim(),
+      valor,
+      conta: input.contaDestino,
+      data: input.data,
+      tagIds: [],
+      comentario,
+      transferenciaId,
+    },
+    existenteDestino?.criadoEm ?? stamp
+  );
+
+  const next = [...semPar, origem, destino];
+  setStored({ transacoes: sortTransacoesDesc(next), tags, contas });
+}
+
+export function deleteTransferencia(transferenciaId: string): void {
+  const { transacoes, tags, contas } = getStored();
+  setStored({
+    transacoes: transacoes.filter((t) => t.transferenciaId !== transferenciaId),
     tags,
     contas,
   });

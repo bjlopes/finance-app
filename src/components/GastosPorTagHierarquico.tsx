@@ -7,6 +7,7 @@ import type { Transacao } from "@/types";
 import type { Tag } from "@/types";
 import { getDescendantIds, getTagPath, type TagSpendingNode } from "@/lib/tags-utils";
 import { formatLocalDate } from "@/lib/dateUtils";
+import { compareTransacoesDesc } from "@/lib/transacoes-utils";
 import { useData } from "@/context/DataContext";
 import { TransactionForm } from "@/components/TransactionForm";
 
@@ -239,7 +240,7 @@ export function GastosPorTagHierarquico({
               ) : (
                 <ul className="space-y-2">
                   {transacoesDaTag
-                    .sort((a, b) => b.data.localeCompare(a.data))
+                    .sort(compareTransacoesDesc)
                     .map((t) => (
                       <li
                         key={t.id}
@@ -293,11 +294,11 @@ export function GastosPorTagHierarquico({
 
       {editingTransacao && (
         <div
-          className="fixed inset-0 z-[60] p-4 bg-black/60"
+          className="modal-overlay z-[60]"
           onClick={() => setEditingTransacao(null)}
         >
           <div
-            className="fixed left-1/2 top-1/2 z-[61] w-full max-w-lg max-h-[min(85vh,calc(100dvh-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl glass shadow-xl"
+            className="modal-content-centered glass rounded-xl w-full max-w-lg overflow-hidden flex flex-col shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-slate-700/50 flex items-center justify-between">
@@ -310,7 +311,7 @@ export function GastosPorTagHierarquico({
                 <X size={20} />
               </button>
             </div>
-            <div className="p-4">
+            <div className="p-4 phone:p-3.5 overflow-y-auto flex-1 min-h-0">
               <TransactionForm
                 transaction={editingTransacao}
                 showCancel

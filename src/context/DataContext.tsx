@@ -15,6 +15,7 @@ import {
   saveUserData,
   type UserData,
 } from "@/lib/store-remote";
+import type { TransferenciaInput } from "@/lib/transferencias";
 import { useAuth } from "@/context/AuthContext";
 
 export interface ContaItem {
@@ -22,6 +23,8 @@ export interface ContaItem {
   nome: string;
   isCartaoCredito?: boolean;
   dataFechamento?: number;
+  /** Conta de investimento — transferências para/de ela viram aporte/resgate no dashboard */
+  isInvestimento?: boolean;
 }
 
 interface DataContextValue {
@@ -32,6 +35,8 @@ interface DataContextValue {
   load: () => void;
   importAndSync: (data: UserData) => Promise<void>;
   saveTransacao: (t: Transacao) => void;
+  saveTransacoes: (items: Transacao[]) => void;
+  saveTransferencia: (input: import("@/lib/transferencias").TransferenciaInput) => void;
   deleteTransacao: (id: string) => void;
   saveTag: (t: Tag) => Tag;
   deleteTag: (id: string) => void;
@@ -122,6 +127,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const saveTransacao = useCallback(
     (t: Transacao) => {
       store.saveTransacao(t);
+      const next = store.getTransacoes();
+      setTransacoes(next);
+      persistToRemote({
+        transacoes: next,
+        tags: store.getTags(),
+        contas: store.getContas(),
+      });
+    },
+    [persistToRemote]
+  );
+
+  const saveTransacoes = useCallback(
+    (items: Transacao[]) => {
+      store.saveTransacoes(items);
+      const next = store.getTransacoes();
+      setTransacoes(next);
+      persistToRemote({
+        transacoes: next,
+        tags: store.getTags(),
+        contas: store.getContas(),
+      });
+    },
+    [persistToRemote]
+  );
+
+  const saveTransferencia = useCallback(
+    (input: TransferenciaInput) => {
+      store.saveTransferencia(input);
       const next = store.getTransacoes();
       setTransacoes(next);
       persistToRemote({
@@ -257,6 +290,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       load,
       importAndSync,
       saveTransacao,
+      saveTransacoes,
+      saveTransferencia,
       deleteTransacao,
       saveTag,
       deleteTag,
@@ -273,6 +308,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       load,
       importAndSync,
       saveTransacao,
+      saveTransacoes,
+      saveTransferencia,
       deleteTransacao,
       saveTag,
       deleteTag,

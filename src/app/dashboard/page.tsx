@@ -8,7 +8,9 @@ import { DonutChart } from "@/components/DonutChart";
 import Link from "next/link";
 import { useData } from "@/context/DataContext";
 import { getMesEfetivo } from "@/lib/fluxoCaixa";
+import { isFluxoReal, calcularMovimentosInvestimento } from "@/lib/transferencias";
 import { formatLocalDate } from "@/lib/dateUtils";
+import { compareTransacoesDesc } from "@/lib/transacoes-utils";
 
 const DASHBOARD_CONTAS_KEY = "finance-app-dashboard-contas";
 
@@ -88,8 +90,8 @@ export default function DashboardPage() {
     );
     transacoesMes = transacoesMes.filter((t) => contasAtivas.includes(t.conta));
 
-    const gastos = transacoesMes.filter((t) => t.valor < 0);
-    const receitas = transacoesMes.filter((t) => t.valor > 0);
+    const gastos = transacoesMes.filter((t) => t.valor < 0 && isFluxoReal(t));
+    const receitas = transacoesMes.filter((t) => t.valor > 0 && isFluxoReal(t));
     const totalGastos = gastos.reduce((sum, t) => sum + Math.abs(t.valor), 0);
     const totalReceitas = receitas.reduce((sum, t) => sum + t.valor, 0);
     const saldo = totalReceitas - totalGastos;
@@ -115,6 +117,14 @@ export default function DashboardPage() {
       .sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor))
       .slice(0, 5);
 
+    const temContaInvestimento = contas.some((c) => c.isInvestimento);
+    const investimento = calcularMovimentosInvestimento(
+      transacoes,
+      contas,
+      mesSelecionado,
+      (t) => getMesEfetivo(t, contas)
+    );
+
     const [ano, mes] = mesSelecionado.split("-").map(Number);
     return {
       mesLabel: `${MESES[mes - 1]} ${ano}`,
@@ -130,6 +140,8 @@ export default function DashboardPage() {
       qtdGastos: gastos.length,
       qtdReceitas: receitas.length,
       totalTransacoes: transacoes.length,
+      temContaInvestimento,
+      investimento,
     };
   }, [transacoes, tags, contas, mesSelecionado, contasAtivas]);
 
@@ -142,7 +154,7 @@ export default function DashboardPage() {
           contasAtivas.includes(t.conta) &&
           t.conta === contaSaldoModal
       )
-      .sort((a, b) => b.data.localeCompare(a.data));
+      .sort(compareTransacoesDesc);
   }, [contaSaldoModal, transacoes, contas, mesSelecionado, contasAtivas]);
 
   const saldoContaModal = useMemo(
@@ -172,26 +184,34 @@ export default function DashboardPage() {
     );
   };
 
+  const contasLabelLong =
+    contasAtivas.length === contas.length
+      ? "Todas as contas"
+      : `${contasAtivas.length} de ${contas.length} contas`;
+  const contasLabelShort =
+    contasAtivas.length === contas.length
+      ? "Todas"
+      : `${contasAtivas.length}/${contas.length}`;
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 phone:gap-2.5 sm:flex-row sm:items-center sm:justify-between ipad:gap-4">
-        <div>
+      <div className="flex flex-col gap-3 phone:gap-2.5 sm:flex-row sm:items-start sm:justify-between ipad:gap-4">
+        <div className="min-w-0">
           <h1 className="text-[length:var(--fluid-text-2xl)] font-bold text-slate-100">Dashboard</h1>
           <p className="text-[length:var(--fluid-text-sm)] text-slate-400 mt-1">{stats.mesLabel}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2 w-full sm:flex-row sm:flex-nowrap sm:items-center sm:justify-end sm:w-auto sm:max-w-full sm:shrink-0">
           {contas.length > 0 && (
-          <div className="relative" ref={contasDropdownRef}>
+          <div className="relative w-full sm:w-auto" ref={contasDropdownRef}>
             <button
               type="button"
               onClick={() => setContasDropdownOpen((o) => !o)}
-              className="flex items-center gap-2 min-h-[44px] px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700/50 text-sm"
+              className="flex items-center gap-2 min-h-[44px] w-full sm:w-auto max-w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700/50 text-sm"
             >
               <Wallet size={18} className="shrink-0" />
-              <span>
-                {contasAtivas.length === contas.length
-                  ? "Todas as contas"
-                  : `${contasAtivas.length} de ${contas.length} contas`}
+              <span className="truncate min-w-0 flex-1 sm:flex-none text-left">
+                <span className="sm:hidden">{contasLabelShort}</span>
+                <span className="hidden sm:inline">{contasLabelLong}</span>
               </span>
               <ChevronDown size={16} className={`shrink-0 transition-transform ${contasDropdownOpen ? "rotate-180" : ""}`} />
             </button>
@@ -241,28 +261,30 @@ export default function DashboardPage() {
             )}
           </div>
           )}
-          <button
-            type="button"
-            onClick={() => mudarMes(-1)}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-            aria-label="Mês anterior"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <input
-            type="month"
-            value={mesSelecionado}
-            onChange={(e) => setMesSelecionado(e.target.value)}
-            className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 min-h-[44px]"
-          />
-          <button
-            type="button"
-            onClick={() => mudarMes(1)}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-            aria-label="Próximo mês"
-          >
-            <ChevronRight size={20} />
-          </button>
+          <div className="flex items-center justify-between gap-1 w-full sm:w-auto sm:justify-end sm:flex-nowrap">
+            <button
+              type="button"
+              onClick={() => mudarMes(-1)}
+              className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 shrink-0"
+              aria-label="Mês anterior"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <input
+              type="month"
+              value={mesSelecionado}
+              onChange={(e) => setMesSelecionado(e.target.value)}
+              className="flex-1 min-w-0 max-w-none sm:flex-none sm:w-[9.5rem] px-2 phone:px-2.5 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/50 min-h-[44px]"
+            />
+            <button
+              type="button"
+              onClick={() => mudarMes(1)}
+              className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 shrink-0"
+              aria-label="Próximo mês"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -327,6 +349,48 @@ export default function DashboardPage() {
               </span>
               <span>{stats.qtdTransacoesMes} transações</span>
             </div>
+
+            {(stats.temContaInvestimento ||
+              stats.investimento.aportes > 0 ||
+              stats.investimento.resgates > 0) && (
+              <div className="pt-3 border-t border-slate-700/50 space-y-3">
+                <h3 className="flex items-center gap-2 text-slate-300 font-medium text-sm">
+                  <TrendingUp size={16} className="text-emerald-400" />
+                  Investimentos
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Aportes no mês</p>
+                    <p className="text-lg font-bold text-emerald-400 tabular-nums">
+                      {formatBRL(stats.investimento.aportes)}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {stats.investimento.qtdAportes}{" "}
+                      {stats.investimento.qtdAportes === 1 ? "transferência" : "transferências"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Resgates no mês</p>
+                    <p className="text-lg font-bold text-sky-400 tabular-nums">
+                      {formatBRL(stats.investimento.resgates)}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {stats.investimento.qtdResgates}{" "}
+                      {stats.investimento.qtdResgates === 1 ? "transferência" : "transferências"}
+                    </p>
+                  </div>
+                </div>
+                {!stats.temContaInvestimento && (
+                  <p className="text-xs text-amber-400/90">
+                    Marque sua conta em{" "}
+                    <Link href="/contas" className="text-brand-400 hover:underline">
+                      Contas
+                    </Link>{" "}
+                    como investimento para contabilizar aportes automaticamente.
+                  </p>
+                )}
+              </div>
+            )}
 
             {stats.tagHierarchy.length > 0 && (
               <div className="pt-2 border-t border-slate-700/50">
@@ -537,7 +601,7 @@ export default function DashboardPage() {
               ) : (
                 <ul className="space-y-2">
                   {[...stats.receitas]
-                    .sort((a, b) => b.data.localeCompare(a.data))
+                    .sort(compareTransacoesDesc)
                     .map((t) => (
                       <li
                         key={t.id}

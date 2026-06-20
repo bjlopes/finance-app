@@ -1,0 +1,50 @@
+/**
+ * Agent 14 — página Contas (CC + investimento)
+ */
+import fs from "node:fs";
+import path from "node:path";
+import {
+  assert,
+  section,
+  installLocalStorageMock,
+  removeBrowserGlobals,
+  exitCode,
+} from "./_helpers";
+import { saveConta, getContas, clearLocalData } from "../../src/lib/store";
+
+const ROOT = path.resolve(__dirname, "../..");
+const PAGE = path.join(ROOT, "src/app/contas/page.tsx");
+const pageSrc = fs.readFileSync(PAGE, "utf8");
+
+section("UI — flags e badges");
+assert(pageSrc.includes("isCartaoCredito"), "checkbox cartão de crédito");
+assert(pageSrc.includes("isInvestimento"), "checkbox investimento");
+assert(pageSrc.includes("Conta de investimento"), "label investimento");
+assert(pageSrc.includes("Invest."), "badge Invest.");
+assert(pageSrc.includes("dataFechamento"), "campo fechamento fatura");
+
+section("Store — persistência");
+installLocalStorageMock();
+clearLocalData();
+
+saveConta({
+  id: "cc1",
+  nome: "Cartão XP",
+  isCartaoCredito: true,
+  dataFechamento: 10,
+});
+saveConta({
+  id: "inv1",
+  nome: "CDBs",
+  isInvestimento: true,
+});
+
+const contas = getContas();
+const cc = contas.find((c) => c.nome === "Cartão XP");
+const inv = contas.find((c) => c.nome === "CDBs");
+assert(Boolean(cc?.isCartaoCredito), "persiste isCartaoCredito");
+assert(cc?.dataFechamento === 10, "persiste dataFechamento");
+assert(Boolean(inv?.isInvestimento), "persiste isInvestimento");
+
+removeBrowserGlobals();
+process.exit(exitCode());

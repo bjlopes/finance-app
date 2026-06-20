@@ -34,3 +34,4 @@ public/*-backup-*.json
 
 # accidental duplicates
 package-lock 2.json
+.vercel

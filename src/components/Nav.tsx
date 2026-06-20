@@ -37,7 +37,7 @@ export function Nav() {
   return (
     <>
       <nav className="sticky top-0 z-50 glass border-b border-slate-700/50 pt-[env(safe-area-inset-top)]">
-        <div className="max-w-[min(100%,56rem)] tablet:max-w-[min(100%,56rem)] lg:max-w-[min(100%,72rem)] ipad:max-w-[min(100%,min(78rem,calc(100vw-1.5rem)))] mx-auto px-4 tablet:px-6 lg:px-8 ipad:px-8 py-3 phone:py-2.5">
+        <div className="max-w-[min(100%,56rem)] tablet:max-w-[min(100%,56rem)] lg:max-w-[min(100%,72rem)] ipad:max-w-[min(100%,min(78rem,calc(100vw-1.5rem)))] mx-auto pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))] tablet:pl-6 tablet:pr-6 lg:pl-8 lg:pr-8 ipad:pl-8 ipad:pr-8 py-3 phone:py-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               {showNavLinks && (

@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Plus, Trash2, Pencil, ChevronDown, ChevronRight, Check, Tags, ListFilter, X } from "lucide-react";
+import { Plus, Trash2, Pencil, ChevronDown, ChevronRight, Check, Tags, ListFilter, X, ArrowLeftRight } from "lucide-react";
 import { TransactionForm } from "@/components/TransactionForm";
 import { TagSubtagInput } from "@/components/TagSubtagInput";
 import { useData } from "@/context/DataContext";
@@ -25,6 +25,12 @@ import {
   parseParcela,
 } from "@/lib/parcelas-utils";
 import { getDataVencimentoFatura, getMesEfetivo } from "@/lib/fluxoCaixa";
+import {
+  filtrarTransacoesParaLista,
+  getContaDestinoTransferencia,
+  isTransferencia,
+} from "@/lib/transferencias";
+import { sortTransacoesDesc } from "@/lib/transacoes-utils";
 import type { Transacao } from "@/types";
 
 export default function TransacoesPage() {
@@ -160,8 +166,13 @@ export default function TransacoesPage() {
     const gruposOrdenados = Array.from(grupos.entries()).sort(
       ([, a], [, b]) => (b[0]?.data ?? "").localeCompare(a[0]?.data ?? "")
     );
-    const paraLista = transacoesFiltradas.filter(
-      (t) => !isParcelada(t.descricao) || t.data <= hoje
+    // Parcelas com data ≤ hoje na lista; futuras só no modal Parceladas
+    const paraLista = sortTransacoesDesc(
+      filtrarTransacoesParaLista(
+        transacoesFiltradas.filter(
+          (t) => !isParcelada(t.descricao) || t.data <= hoje
+        )
+      )
     );
     return {
       transacoesNormais: paraLista,
@@ -205,9 +216,20 @@ export default function TransacoesPage() {
     setEditingTransaction(null);
   }, []);
 
-  const handleDelete = (id: string) => {
-    if (!confirm("Excluir esta transação?")) return;
-    deleteTransacao(id);
+  const handleDelete = (t: Transacao) => {
+    let msg: string;
+    if (isTransferencia(t)) {
+      msg = "Excluir esta transferência? As duas contas serão desfeitas.";
+    } else if (isParcelada(t.descricao)) {
+      const p = parseParcela(t.descricao);
+      msg = p
+        ? `Parcela ${p.n}/${p.total} de uma compra parcelada. Excluir só esta? O grupo ficará incompleto — no modal Parceladas você pode excluir todas de uma vez.`
+        : "Excluir esta parcela?";
+    } else {
+      msg = "Excluir esta transação?";
+    }
+    if (!confirm(msg)) return;
+    deleteTransacao(t.id);
   };
 
   const handleBulkApplyTags = () => {
@@ -516,6 +538,10 @@ export default function TransacoesPage() {
               const transacaoTags = tags.filter((tg) => t.tagIds.includes(tg.id));
               const isExpanded = expandedId === t.id;
               const temComentario = !!t.comentario?.trim();
+              const transferencia = isTransferencia(t);
+              const contaDestino = transferencia
+                ? getContaDestinoTransferencia(t, transacoes)
+                : undefined;
               return (
                 <li
                   key={t.id}
@@ -539,13 +565,27 @@ export default function TransacoesPage() {
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium text-slate-200 truncate">
-                          {t.descricao}
-                        </p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-slate-200 truncate">
+                            {t.descricao}
+                          </p>
+                          {transferencia && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/25 shrink-0">
+                              <ArrowLeftRight size={10} />
+                              Transferência
+                            </span>
+                          )}
+                        </div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
                           <span>{formatDate(t.data)}</span>
                           <span>•</span>
-                          <span className="break-words">{t.conta}</span>
+                          {transferencia && contaDestino ? (
+                            <span className="break-words">
+                              {t.conta} → {contaDestino}
+                            </span>
+                          ) : (
+                            <span className="break-words">{t.conta}</span>
+                          )}
                         </div>
                       </div>
                       <div
@@ -554,10 +594,14 @@ export default function TransacoesPage() {
                       >
                         <span
                           className={`font-semibold ${
-                            t.valor >= 0 ? "text-brand-400" : "text-red-400"
+                            transferencia
+                              ? "text-sky-400"
+                              : t.valor >= 0
+                                ? "text-brand-400"
+                                : "text-red-400"
                           }`}
                         >
-                          {formatBRL(t.valor)}
+                          {formatBRL(transferencia ? Math.abs(t.valor) : t.valor)}
                         </span>
                         <button
                           type="button"
@@ -569,7 +613,7 @@ export default function TransacoesPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(t.id)}
+                          onClick={() => handleDelete(t)}
                           className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                           title="Excluir"
                         >
@@ -768,7 +812,26 @@ export default function TransacoesPage() {
                       <div className="min-w-0 flex-1">
                         <p className="font-medium text-slate-200 break-words">{baseDesc}</p>
                         <div className="mt-0.5 text-xs text-slate-500">
-                          {parcelas.length} de {parseParcela(parcelas[0]?.descricao ?? "")?.total ?? parcelas.length} parcelas • {formatDate(parcelas[0]?.data ?? "")} • {parcelas[0]?.conta ?? ""}
+                          {(() => {
+                            const esperado =
+                              parseParcela(parcelas[0]?.descricao ?? "")?.total ??
+                              parcelas.length;
+                            const incompleto = parcelas.length < esperado;
+                            return (
+                              <>
+                                {parcelas.length} de {esperado} parcelas
+                                {incompleto && (
+                                  <span className="text-amber-400/90">
+                                    {" "}
+                                    ({esperado - parcelas.length} ausente
+                                    {esperado - parcelas.length !== 1 ? "s" : ""})
+                                  </span>
+                                )}
+                                {" • "}
+                                {formatDate(parcelas[0]?.data ?? "")} • {parcelas[0]?.conta ?? ""}
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                       <div

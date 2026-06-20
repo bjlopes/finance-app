@@ -1,10 +1,27 @@
 import { promises as fs } from "fs";
 import path from "path";
 import type { Transacao, Tag } from "@/types";
+import { sortTransacoesDesc } from "@/lib/transacoes-utils";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const TRANSACOES_FILE = path.join(DATA_DIR, "transacoes.json");
 const TAGS_FILE = path.join(DATA_DIR, "tags.json");
+const CONTAS_FILE = path.join(DATA_DIR, "contas.json");
+
+export interface DbContaItem {
+  id: string;
+  nome: string;
+  isCartaoCredito?: boolean;
+  dataFechamento?: number;
+  isInvestimento?: boolean;
+}
+
+const DEFAULT_CONTAS: DbContaItem[] = [
+  { id: "conta-0", nome: "Nubank" },
+  { id: "conta-1", nome: "Dinheiro" },
+  { id: "conta-2", nome: "Casa" },
+  { id: "conta-3", nome: "Alimentação" },
+];
 
 const DEFAULT_TAGS: Tag[] = [
   { id: "1", nome: "transporte", cor: "#3b82f6" },
@@ -44,6 +61,19 @@ export async function getTransacoes(): Promise<Transacao[]> {
   return readJson<Transacao[]>(TRANSACOES_FILE, []);
 }
 
+export async function getContas(): Promise<DbContaItem[]> {
+  const contas = await readJson<DbContaItem[]>(CONTAS_FILE, []);
+  if (contas.length === 0) {
+    await writeJson(CONTAS_FILE, DEFAULT_CONTAS);
+    return DEFAULT_CONTAS;
+  }
+  return contas;
+}
+
+function sortTransacoesPorData(transacoes: Transacao[]): Transacao[] {
+  return sortTransacoesDesc(transacoes);
+}
+
 export async function saveTransacao(transacao: Transacao): Promise<void> {
   const transacoes = await getTransacoes();
   const index = transacoes.findIndex((t) => t.id === transacao.id);
@@ -52,8 +82,7 @@ export async function saveTransacao(transacao: Transacao): Promise<void> {
   } else {
     transacoes.push(transacao);
   }
-  transacoes.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
-  await writeJson(TRANSACOES_FILE, transacoes);
+  await writeJson(TRANSACOES_FILE, sortTransacoesPorData(transacoes));
 }
 
 export async function deleteTransacao(id: string): Promise<void> {

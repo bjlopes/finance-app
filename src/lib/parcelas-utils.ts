@@ -63,3 +63,54 @@ export function filterGruposEncerrados(
 export function isParcelada(descricao: string): boolean {
   return parseParcela(descricao) !== null;
 }
+
+/** Divide um total em N parcelas; centavos restantes vão para a 1ª. */
+export function distribuirValorParcelas(total: number, n: number): number[] {
+  if (n <= 0) return [];
+  const totalCents = Math.round(total * 100);
+  const baseCents = Math.floor(totalCents / n);
+  const resto = totalCents - baseCents * n;
+
+  if (resto === 0) {
+    const valor = baseCents / 100;
+    return Array(n).fill(valor);
+  }
+
+  const valores: number[] = [(baseCents + resto) / 100];
+  for (let i = 1; i < n; i++) {
+    valores.push(baseCents / 100);
+  }
+  return valores;
+}
+
+/** Garante exatamente `n` valores; redistribui se o array estiver incompleto. */
+export function normalizarValoresParcelas(
+  valores: number[],
+  n: number,
+  totalFallback: number
+): number[] {
+  if (n <= 0) return [];
+  if (
+    valores.length === n &&
+    valores.every((v) => typeof v === "number" && !Number.isNaN(v) && v > 0)
+  ) {
+    return valores;
+  }
+  const total =
+    totalFallback > 0
+      ? totalFallback
+      : valores.reduce((s, v) => s + (v || 0), 0);
+  return distribuirValorParcelas(total, n);
+}
+
+/** Mapa parcela n → transação (para edição sem perder a 1ª parcela). */
+export function mapParcelasPorNumero(
+  parcelas: Transacao[]
+): Map<number, Transacao> {
+  const map = new Map<number, import("@/types").Transacao>();
+  for (const p of parcelas) {
+    const parsed = parseParcela(p.descricao);
+    if (parsed) map.set(parsed.n, p);
+  }
+  return map;
+}
