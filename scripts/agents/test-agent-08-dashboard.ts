@@ -3,7 +3,7 @@
  */
 import { assert, section, approx, exitCode } from "./_helpers";
 import { getMesEfetivo } from "../../src/lib/fluxoCaixa";
-import { isFluxoReal, calcularMovimentosInvestimento } from "../../src/lib/transferencias";
+import { isFluxoReal, calcularMovimentosInvestimento, calcularSaldoFluxoMes } from "../../src/lib/transferencias";
 import { buildTagSpendingHierarchy } from "../../src/lib/tags-utils";
 import type { Transacao, Tag } from "../../src/types";
 import type { ContaItem } from "../../src/context/DataContext";
@@ -24,7 +24,6 @@ function calcDashboardStats(
   const receitas = transacoesMes.filter((t) => t.valor > 0 && isFluxoReal(t));
   const totalGastos = gastos.reduce((sum, t) => sum + Math.abs(t.valor), 0);
   const totalReceitas = receitas.reduce((sum, t) => sum + t.valor, 0);
-  const saldo = totalReceitas - totalGastos;
 
   const gastosPorTagId: Record<string, number> = {};
   gastos.forEach((t) => {
@@ -44,6 +43,8 @@ function calcDashboardStats(
     mesSelecionado,
     (t) => getMesEfetivo(t, contas)
   );
+
+  const saldo = calcularSaldoFluxoMes(totalReceitas, totalGastos, investimento);
 
   return {
     totalGastos,
@@ -95,7 +96,39 @@ section("Receitas e gastos excluem transferência");
 const stats = calcDashboardStats(transacoes, tags, contas, "2025-06", ["Nubank", "Investimentos"]);
 assert(approx(stats.totalReceitas, 5000), "receitas = salário");
 assert(approx(stats.totalGastos, 2050), "gastos = uber + aluguel (sem transferência)");
-assert(approx(stats.saldo, 2950), "saldo = receitas - gastos");
+assert(approx(stats.saldo, 1950), "saldo = receitas - gastos - aporte");
+
+section("Resgate impacta saldo positivamente");
+const comResgate = calcDashboardStats(
+  [
+    ...transacoes,
+    {
+      id: "6",
+      descricao: "Resgate CDB",
+      valor: -300,
+      conta: "Investimentos",
+      contaDestino: "Nubank",
+      data: "2025-06-20",
+      tagIds: [],
+      transferenciaId: "tid-r",
+    },
+    {
+      id: "7",
+      descricao: "Resgate CDB",
+      valor: 300,
+      conta: "Nubank",
+      data: "2025-06-20",
+      tagIds: [],
+      transferenciaId: "tid-r",
+    },
+  ],
+  tags,
+  contas,
+  "2025-06",
+  ["Nubank", "Investimentos"]
+);
+assert(approx(comResgate.investimento.resgates, 300), "resgate contabilizado");
+assert(approx(comResgate.saldo, 2250), "saldo + resgate: 1950+300");
 
 section("Tags");
 assert(approx(stats.gastosPorTagId["t1"] ?? 0, 50), "gasto transporte");

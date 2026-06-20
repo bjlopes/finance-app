@@ -4,6 +4,7 @@
 import { assert, section, exitCode } from "./_helpers";
 import {
   calcularMovimentosInvestimento,
+  calcularSaldoFluxoMes,
   isContaInvestimento,
 } from "../../src/lib/transferencias";
 import type { Transacao } from "../../src/types";
@@ -58,5 +59,11 @@ assert(mov.aportes === 1000, "aportes");
 assert(mov.resgates === 300, "resgates");
 assert(mov.qtdAportes === 1, "qtd aportes");
 assert(mov.qtdResgates === 1, "qtd resgates");
+
+section("Saldo do mês com investimentos");
+assert(
+  calcularSaldoFluxoMes(5000, 2050, mov) === 5000 - 2050 + 300 - 1000,
+  "resgates somam, aportes subtraem"
+);
 
 process.exit(exitCode());

@@ -106,3 +106,17 @@ export function calcularMovimentosInvestimento(
 
   return { aportes, resgates, qtdAportes, qtdResgates };
 }
+
+/**
+ * Saldo do mês no dashboard: receitas − gastos reais, ajustado por investimentos.
+ * Resgates voltam para o fluxo (+); aportes saem do fluxo (−), sem virar “gasto”.
+ */
+export function calcularSaldoFluxoMes(
+  totalReceitas: number,
+  totalGastos: number,
+  investimento: MovimentosInvestimento
+): number {
+  return (
+    totalReceitas - totalGastos + investimento.resgates - investimento.aportes
+  );
+}

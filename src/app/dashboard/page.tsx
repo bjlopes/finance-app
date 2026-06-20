@@ -8,7 +8,7 @@ import { DonutChart } from "@/components/DonutChart";
 import Link from "next/link";
 import { useData } from "@/context/DataContext";
 import { getMesEfetivo } from "@/lib/fluxoCaixa";
-import { isFluxoReal, calcularMovimentosInvestimento } from "@/lib/transferencias";
+import { isFluxoReal, calcularMovimentosInvestimento, calcularSaldoFluxoMes } from "@/lib/transferencias";
 import { formatLocalDate } from "@/lib/dateUtils";
 import { compareTransacoesDesc } from "@/lib/transacoes-utils";
 
@@ -94,7 +94,16 @@ export default function DashboardPage() {
     const receitas = transacoesMes.filter((t) => t.valor > 0 && isFluxoReal(t));
     const totalGastos = gastos.reduce((sum, t) => sum + Math.abs(t.valor), 0);
     const totalReceitas = receitas.reduce((sum, t) => sum + t.valor, 0);
-    const saldo = totalReceitas - totalGastos;
+
+    const temContaInvestimento = contas.some((c) => c.isInvestimento);
+    const investimento = calcularMovimentosInvestimento(
+      transacoes,
+      contas,
+      mesSelecionado,
+      (t) => getMesEfetivo(t, contas)
+    );
+
+    const saldo = calcularSaldoFluxoMes(totalReceitas, totalGastos, investimento);
 
     const gastosPorTagId: Record<string, number> = {};
     gastos.forEach((t) => {
@@ -116,14 +125,6 @@ export default function DashboardPage() {
     const maioresGastos = [...gastos]
       .sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor))
       .slice(0, 5);
-
-    const temContaInvestimento = contas.some((c) => c.isInvestimento);
-    const investimento = calcularMovimentosInvestimento(
-      transacoes,
-      contas,
-      mesSelecionado,
-      (t) => getMesEfetivo(t, contas)
-    );
 
     const [ano, mes] = mesSelecionado.split("-").map(Number);
     return {
@@ -328,18 +329,25 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            <div className="flex items-center justify-between py-3 border-y border-slate-700/50">
-              <div className="flex items-center gap-2 text-slate-300">
-                <Wallet size={18} />
-                <span className="font-medium">Saldo do mês</span>
+            <div className="py-3 border-y border-slate-700/50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <Wallet size={18} />
+                  <span className="font-medium">Saldo do mês</span>
+                </div>
+                <p
+                  className={`text-lg font-bold ${
+                    stats.saldoMes >= 0 ? "text-brand-400" : "text-red-400"
+                  }`}
+                >
+                  {formatBRL(stats.saldoMes)}
+                </p>
               </div>
-              <p
-                className={`text-lg font-bold ${
-                  stats.saldoMes >= 0 ? "text-brand-400" : "text-red-400"
-                }`}
-              >
-                {formatBRL(stats.saldoMes)}
-              </p>
+              {(stats.investimento.aportes > 0 || stats.investimento.resgates > 0) && (
+                <p className="text-xs text-slate-500 mt-1.5 text-right">
+                  Ajustado por resgates (+) e aportes (−) de investimento
+                </p>
+              )}
             </div>
 
             <div className="flex items-center justify-between text-sm text-slate-400">
