@@ -8,7 +8,7 @@ import { DonutChart } from "@/components/DonutChart";
 import Link from "next/link";
 import { useData } from "@/context/DataContext";
 import { getMesEfetivo } from "@/lib/fluxoCaixa";
-import { isFluxoReal, calcularMovimentosInvestimento, calcularSaldoFluxoMes } from "@/lib/transferencias";
+import { isFluxoReal, isContaInvestimento, calcularMovimentosInvestimento, calcularSaldoMes, calcularSaldosContaMes, somarSaldoPorContaMes, totalReceitasDashboard, totalGastosDashboard, getContaDestinoTransferencia, getContaOrigemTransferencia } from "@/lib/transferencias";
 import { formatLocalDate } from "@/lib/dateUtils";
 import { compareTransacoesDesc } from "@/lib/transacoes-utils";
 
@@ -52,6 +52,8 @@ export default function DashboardPage() {
   const [contasDashboard, setContasDashboard] = useState<string[] | null>(null);
   const [contasDropdownOpen, setContasDropdownOpen] = useState(false);
   const [receitasModalOpen, setReceitasModalOpen] = useState(false);
+  const [aportesModalOpen, setAportesModalOpen] = useState(false);
+  const [resgatesModalOpen, setResgatesModalOpen] = useState(false);
   const [contaSaldoModal, setContaSaldoModal] = useState<string | null>(null);
   const contasDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -92,18 +94,21 @@ export default function DashboardPage() {
 
     const gastos = transacoesMes.filter((t) => t.valor < 0 && isFluxoReal(t));
     const receitas = transacoesMes.filter((t) => t.valor > 0 && isFluxoReal(t));
-    const totalGastos = gastos.reduce((sum, t) => sum + Math.abs(t.valor), 0);
-    const totalReceitas = receitas.reduce((sum, t) => sum + t.valor, 0);
+    const gastosFluxo = gastos.reduce((sum, t) => sum + Math.abs(t.valor), 0);
+    const receitasFluxo = receitas.reduce((sum, t) => sum + t.valor, 0);
 
     const temContaInvestimento = contas.some((c) => c.isInvestimento);
     const investimento = calcularMovimentosInvestimento(
       transacoes,
       contas,
       mesSelecionado,
-      (t) => getMesEfetivo(t, contas)
+      (t) => getMesEfetivo(t, contas),
+      contasAtivas
     );
 
-    const saldo = calcularSaldoFluxoMes(totalReceitas, totalGastos, investimento);
+    const totalGastos = totalGastosDashboard(gastosFluxo);
+    const totalReceitas = totalReceitasDashboard(receitasFluxo);
+    const saldo = calcularSaldoMes(totalReceitas, totalGastos);
 
     const gastosPorTagId: Record<string, number> = {};
     gastos.forEach((t) => {
@@ -114,12 +119,20 @@ export default function DashboardPage() {
 
     const tagHierarchy = buildTagSpendingHierarchy(tags, gastosPorTagId);
 
-    const saldoPorConta: Record<string, number> = {};
-    transacoesMes.forEach((t) => {
-      saldoPorConta[t.conta] = (saldoPorConta[t.conta] || 0) + t.valor;
-    });
+    const saldosConta = calcularSaldosContaMes(
+      transacoes,
+      transacoesMes,
+      contas,
+      mesSelecionado,
+      contasAtivas
+    );
+    const { saldoInicial: saldoInicialPorConta, movimentoMes: movimentoPorConta, saldoFinal: saldoFinalPorConta } =
+      saldosConta;
+    // Só contas de caixa: carry-over começa em jul/2026; aportes reduzem o saldo da origem.
+    const somaCaixaMes = somarSaldoPorContaMes(saldoFinalPorConta, contas, "caixa");
 
-    const topContas = Object.entries(saldoPorConta)
+    const topContas = Object.entries(saldoFinalPorConta)
+      .filter(([, saldo]) => saldo !== 0)
       .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a));
 
     const maioresGastos = [...gastos]
@@ -131,7 +144,13 @@ export default function DashboardPage() {
       mesLabel: `${MESES[mes - 1]} ${ano}`,
       totalGastosMes: totalGastos,
       totalReceitasMes: totalReceitas,
+      gastosFluxo,
+      receitasFluxo,
       saldoMes: saldo,
+      somaCaixaMes,
+      saldoInicialPorConta,
+      movimentoPorConta,
+      saldoFinalPorConta,
       tagHierarchy,
       gastos,
       receitas,
@@ -158,10 +177,16 @@ export default function DashboardPage() {
       .sort(compareTransacoesDesc);
   }, [contaSaldoModal, transacoes, contas, mesSelecionado, contasAtivas]);
 
-  const saldoContaModal = useMemo(
+  const movimentoContaModal = useMemo(
     () => transacoesContaSaldoDetalhe.reduce((s, t) => s + t.valor, 0),
     [transacoesContaSaldoDetalhe]
   );
+
+  const saldoInicialContaModal = contaSaldoModal
+    ? stats.saldoInicialPorConta[contaSaldoModal] ?? 0
+    : 0;
+
+  const saldoFinalContaModal = saldoInicialContaModal + movimentoContaModal;
 
   const formatBRL = (n: number) =>
     new Intl.NumberFormat("pt-BR", {
@@ -296,6 +321,9 @@ export default function DashboardPage() {
             <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-700/50 pb-3">
               Fluxo do mês
             </h2>
+            <p className="text-xs text-slate-500 -mt-4">
+              Custo de vida — aportes e resgates ficam em Investimentos
+            </p>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -324,7 +352,6 @@ export default function DashboardPage() {
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {stats.qtdReceitas} {stats.qtdReceitas === 1 ? "transação" : "transações"}
-                  {stats.qtdReceitas > 0 && " · Clique para ver"}
                 </p>
               </button>
             </div>
@@ -343,11 +370,6 @@ export default function DashboardPage() {
                   {formatBRL(stats.saldoMes)}
                 </p>
               </div>
-              {(stats.investimento.aportes > 0 || stats.investimento.resgates > 0) && (
-                <p className="text-xs text-slate-500 mt-1.5 text-right">
-                  Ajustado por resgates (+) e aportes (−) de investimento
-                </p>
-              )}
             </div>
 
             <div className="flex items-center justify-between text-sm text-slate-400">
@@ -367,7 +389,17 @@ export default function DashboardPage() {
                   Investimentos
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      stats.investimento.qtdAportes > 0 && setAportesModalOpen(true)
+                    }
+                    className={`text-left ${
+                      stats.investimento.qtdAportes > 0
+                        ? "cursor-pointer hover:opacity-90"
+                        : "cursor-default"
+                    }`}
+                  >
                     <p className="text-xs text-slate-500 mb-1">Aportes no mês</p>
                     <p className="text-lg font-bold text-emerald-400 tabular-nums">
                       {formatBRL(stats.investimento.aportes)}
@@ -376,8 +408,18 @@ export default function DashboardPage() {
                       {stats.investimento.qtdAportes}{" "}
                       {stats.investimento.qtdAportes === 1 ? "transferência" : "transferências"}
                     </p>
-                  </div>
-                  <div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      stats.investimento.qtdResgates > 0 && setResgatesModalOpen(true)
+                    }
+                    className={`text-left ${
+                      stats.investimento.qtdResgates > 0
+                        ? "cursor-pointer hover:opacity-90"
+                        : "cursor-default"
+                    }`}
+                  >
                     <p className="text-xs text-slate-500 mb-1">Resgates no mês</p>
                     <p className="text-lg font-bold text-sky-400 tabular-nums">
                       {formatBRL(stats.investimento.resgates)}
@@ -386,7 +428,7 @@ export default function DashboardPage() {
                       {stats.investimento.qtdResgates}{" "}
                       {stats.investimento.qtdResgates === 1 ? "transferência" : "transferências"}
                     </p>
-                  </div>
+                  </button>
                 </div>
                 {!stats.temContaInvestimento && (
                   <p className="text-xs text-amber-400/90">
@@ -413,13 +455,13 @@ export default function DashboardPage() {
                       value: n.total,
                       color: n.tag.cor || "#6366f1",
                     }))}
-                    total={stats.totalGastosMes}
+                    total={stats.gastosFluxo}
                     formatValue={formatBRL}
                   />
                 </div>
                 <GastosPorTagHierarquico
                   nodes={stats.tagHierarchy}
-                  totalGastos={stats.totalGastosMes}
+                  totalGastos={stats.gastosFluxo}
                   formatBRL={formatBRL}
                   gastos={stats.gastos}
                   tags={tags}
@@ -429,9 +471,9 @@ export default function DashboardPage() {
 
             {stats.topContas.length > 0 && (
               <div className="pt-2 border-t border-slate-700/50">
-                <h3 className="text-slate-300 font-medium mb-3">Saldo por conta</h3>
-                <p className="text-xs text-slate-500 mb-2">
-                  Toque em uma conta para ver as transações que compõem o saldo deste mês.
+                <h3 className="text-slate-300 font-medium">Saldo por conta</h3>
+                <p className="text-xs text-slate-500 mb-3 mt-0.5">
+                  Carry-over automático a partir de julho/2026 (aportes saem da conta de origem)
                 </p>
                 <ul className="space-y-1">
                   {stats.topContas.map(([conta, saldo]) => (
@@ -449,6 +491,12 @@ export default function DashboardPage() {
                     </li>
                   ))}
                 </ul>
+                <div className="mt-3 pt-3 border-t border-slate-700/40 flex justify-between text-sm text-slate-400">
+                  <span>Total caixa</span>
+                  <span className={`font-medium tabular-nums ${stats.somaCaixaMes >= 0 ? "text-brand-400" : "text-red-400"}`}>
+                    {formatBRL(stats.somaCaixaMes)}
+                  </span>
+                </div>
               </div>
             )}
 
@@ -506,7 +554,7 @@ export default function DashboardPage() {
                   value: n.total,
                   color: n.tag.cor || "#6366f1",
                 }))}
-                total={stats.totalGastosMes}
+                total={stats.gastosFluxo}
                 formatValue={formatBRL}
               />
             </div>
@@ -536,12 +584,19 @@ export default function DashboardPage() {
                 <X size={20} />
               </button>
             </div>
-            <p className="px-4 pt-3 text-xs text-slate-500 leading-relaxed">
-              Mesmo critério do saldo do dashboard (mês contábil; cartão de crédito usa a fatura).
-            </p>
-            <div className="overflow-y-auto flex-1 min-h-0 p-4 pt-2">
+            <div className="overflow-y-auto flex-1 min-h-0 p-4">
+              {saldoInicialContaModal !== 0 && (
+                <div className="mb-3 flex justify-between text-sm text-slate-500">
+                  <span>Saldo inicial</span>
+                  <span className="tabular-nums">{formatBRL(saldoInicialContaModal)}</span>
+                </div>
+              )}
               {transacoesContaSaldoDetalhe.length === 0 ? (
-                <p className="text-slate-500 text-sm">Nenhuma transação nesta conta para este mês.</p>
+                <p className="text-slate-500 text-sm">
+                  {saldoInicialContaModal !== 0
+                    ? "Nenhuma movimentação nesta conta neste mês."
+                    : "Nenhuma transação nesta conta para este mês."}
+                </p>
               ) : (
                 <ul className="space-y-2">
                   {transacoesContaSaldoDetalhe.map((t) => (
@@ -566,18 +621,38 @@ export default function DashboardPage() {
                   ))}
                 </ul>
               )}
-              <div className="mt-4 pt-3 border-t border-slate-700/40 flex justify-between text-sm">
-                <span className="text-slate-400">Saldo no mês</span>
-                <span className={saldoContaModal >= 0 ? "text-brand-400 font-semibold" : "text-red-400 font-semibold"}>
-                  {formatBRL(saldoContaModal)}
-                </span>
+              <div className="mt-4 pt-3 border-t border-slate-700/40 space-y-1.5 text-sm">
+                {saldoInicialContaModal !== 0 && (
+                  <div className="flex justify-between text-slate-500">
+                    <span>Movimento no mês</span>
+                    <span
+                      className={`tabular-nums ${
+                        movimentoContaModal >= 0 ? "text-brand-400" : "text-red-400"
+                      }`}
+                    >
+                      {formatBRL(movimentoContaModal)}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-300">
+                  <span className="font-medium">
+                    {saldoInicialContaModal !== 0 ? "Saldo final" : "Saldo no mês"}
+                  </span>
+                  <span
+                    className={`font-semibold tabular-nums ${
+                      saldoFinalContaModal >= 0 ? "text-brand-400" : "text-red-400"
+                    }`}
+                  >
+                    {formatBRL(saldoFinalContaModal)}
+                  </span>
+                </div>
               </div>
               <Link
                 href={`/transacoes?conta=${encodeURIComponent(contaSaldoModal)}&mesEfetivo=${encodeURIComponent(mesSelecionado)}`}
                 onClick={() => setContaSaldoModal(null)}
                 className="mt-3 block text-center text-sm text-brand-400 hover:text-brand-300"
               >
-                Abrir na página Transações (editar, exportar) →
+                Abrir em Transações →
               </Link>
             </div>
           </div>
@@ -593,7 +668,7 @@ export default function DashboardPage() {
             className="modal-content-centered w-full max-w-md overflow-hidden flex flex-col rounded-xl glass shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0">
+            <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0 gap-2">
               <h4 className="font-semibold text-slate-200">Receitas do mês</h4>
               <button
                 type="button"
@@ -626,6 +701,113 @@ export default function DashboardPage() {
                         </span>
                       </li>
                     ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aportesModalOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => setAportesModalOpen(false)}
+        >
+          <div
+            className="modal-content-centered w-full max-w-md overflow-hidden flex flex-col rounded-xl glass shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0 gap-2">
+              <h4 className="font-semibold text-slate-200">Aportes do mês</h4>
+              <button
+                type="button"
+                onClick={() => setAportesModalOpen(false)}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 shrink-0"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-4">
+              {stats.investimento.transacoesAporte.length === 0 ? (
+                <p className="text-slate-500 text-sm">Nenhum aporte</p>
+              ) : (
+                <ul className="space-y-2">
+                  {[...stats.investimento.transacoesAporte]
+                    .sort(compareTransacoesDesc)
+                    .map((t) => {
+                      const destino =
+                        getContaDestinoTransferencia(t, transacoes) ?? t.contaDestino ?? "—";
+                      return (
+                        <li
+                          key={t.id}
+                          className="flex justify-between items-start gap-2 py-2 border-b border-slate-700/30 last:border-0"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-slate-200 truncate">{t.descricao}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {formatLocalDate(t.data, { day: "2-digit", month: "short" })} •{" "}
+                              {t.conta} → {destino}
+                            </p>
+                          </div>
+                          <span className="text-emerald-400 font-medium shrink-0">
+                            {formatBRL(Math.abs(t.valor))}
+                          </span>
+                        </li>
+                      );
+                    })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resgatesModalOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => setResgatesModalOpen(false)}
+        >
+          <div
+            className="modal-content-centered w-full max-w-md overflow-hidden flex flex-col rounded-xl glass shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0 gap-2">
+              <h4 className="font-semibold text-slate-200">Resgates do mês</h4>
+              <button
+                type="button"
+                onClick={() => setResgatesModalOpen(false)}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 shrink-0"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-4">
+              {stats.investimento.transacoesResgate.length === 0 ? (
+                <p className="text-slate-500 text-sm">Nenhum resgate</p>
+              ) : (
+                <ul className="space-y-2">
+                  {[...stats.investimento.transacoesResgate]
+                    .sort(compareTransacoesDesc)
+                    .map((t) => {
+                      const origem = getContaOrigemTransferencia(t, transacoes);
+                      return (
+                        <li
+                          key={t.id}
+                          className="flex justify-between items-start gap-2 py-2 border-b border-slate-700/30 last:border-0"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-slate-200 truncate">{t.descricao}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {formatLocalDate(t.data, { day: "2-digit", month: "short" })} •{" "}
+                              {origem} → {t.conta}
+                            </p>
+                          </div>
+                          <span className="text-sky-400 font-medium shrink-0">
+                            {formatBRL(t.valor)}
+                          </span>
+                        </li>
+                      );
+                    })}
                 </ul>
               )}
             </div>

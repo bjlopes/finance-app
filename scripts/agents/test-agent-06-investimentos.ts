@@ -4,7 +4,9 @@
 import { assert, section, exitCode } from "./_helpers";
 import {
   calcularMovimentosInvestimento,
-  calcularSaldoFluxoMes,
+  calcularSaldoMes,
+  totalReceitasDashboard,
+  totalGastosDashboard,
   isContaInvestimento,
 } from "../../src/lib/transferencias";
 import type { Transacao } from "../../src/types";
@@ -60,10 +62,41 @@ assert(mov.resgates === 300, "resgates");
 assert(mov.qtdAportes === 1, "qtd aportes");
 assert(mov.qtdResgates === 1, "qtd resgates");
 
-section("Saldo do mês com investimentos");
-assert(
-  calcularSaldoFluxoMes(5000, 2050, mov) === 5000 - 2050 + 300 - 1000,
-  "resgates somam, aportes subtraem"
+section("Filtro por contas ativas");
+const soNubank = calcularMovimentosInvestimento(
+  [aporteOrigem, aporteDestino, resgateOrigem],
+  contas,
+  "2025-06",
+  (t) => t.data.slice(0, 7),
+  ["Nubank"]
 );
+assert(soNubank.aportes === 1000, "aporte com origem ativa");
+assert(soNubank.resgates === 300, "resgate com destino ativo");
+
+const soInvestimentos = calcularMovimentosInvestimento(
+  [aporteOrigem, aporteDestino, resgateOrigem],
+  contas,
+  "2025-06",
+  (t) => t.data.slice(0, 7),
+  ["Investimentos"]
+);
+assert(soInvestimentos.aportes === 0, "aporte sem origem ativa não conta");
+assert(soInvestimentos.resgates === 0, "resgate sem destino ativo não conta");
+
+section("Saldo do mês sem misturar investimentos");
+const receitasFluxo = 5000;
+const gastosFluxo = 2050;
+assert(calcularSaldoMes(5000, 2050) === 2950, "saldo = receitas − gastos");
+assert(
+  calcularSaldoMes(
+    totalReceitasDashboard(receitasFluxo),
+    totalGastosDashboard(gastosFluxo)
+  ) === 5000 - 2050,
+  "aportes/resgates não entram no saldo de custo de vida"
+);
+assert(mov.aportes === 1000, "aporte ainda contabilizado em investimentos");
+assert(mov.resgates === 300, "resgate ainda contabilizado em investimentos");
+assert(mov.transacoesResgate.length === 1, "transação de resgate listada");
+assert(mov.transacoesAporte.length === 1, "transação de aporte listada");
 
 process.exit(exitCode());

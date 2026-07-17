@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, ChevronDown, ChevronRight, Check, Tags, ListFilter, X, ArrowLeftRight } from "lucide-react";
 import { TransactionForm } from "@/components/TransactionForm";
 import { TagSubtagInput } from "@/components/TagSubtagInput";
@@ -29,12 +29,14 @@ import {
   filtrarTransacoesParaLista,
   getContaDestinoTransferencia,
   isTransferencia,
+  isTransferenciaOrigem,
 } from "@/lib/transferencias";
 import { sortTransacoesDesc } from "@/lib/transacoes-utils";
 import type { Transacao } from "@/types";
 
 export default function TransacoesPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { transacoes, tags, contas, loading, deleteTransacao, saveTransacao, createTag } = useData();
   const [showForm, setShowForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transacao | null>(null);
@@ -50,6 +52,7 @@ export default function TransacoesPage() {
   const [filterDataDe, setFilterDataDe] = useState<string>("");
   const [filterDataAte, setFilterDataAte] = useState<string>("");
   const [filterConta, setFilterConta] = useState<string | null>(null);
+  const [filterSomenteTransferencias, setFilterSomenteTransferencias] = useState(false);
   const [expandedParceladaKey, setExpandedParceladaKey] = useState<string | null>(null);
   const [parceladasModalOpen, setParceladasModalOpen] = useState(false);
   const [parceladasTab, setParceladasTab] = useState<"ativas" | "encerradas">("ativas");
@@ -80,6 +83,20 @@ export default function TransacoesPage() {
       setFilterConta(contaFromUrl);
     }
   }, [searchParams, contas]);
+
+  useEffect(() => {
+    setFilterSomenteTransferencias(searchParams.get("tipo") === "transferencias");
+  }, [searchParams]);
+
+  const toggleFiltroTransferencias = useCallback(() => {
+    const next = !filterSomenteTransferencias;
+    setFilterSomenteTransferencias(next);
+    const params = new URLSearchParams(searchParams.toString());
+    if (next) params.set("tipo", "transferencias");
+    else params.delete("tipo");
+    const q = params.toString();
+    router.replace(q ? `/transacoes?${q}` : "/transacoes", { scroll: false });
+  }, [filterSomenteTransferencias, router, searchParams]);
 
   useEffect(() => {
     if (filterTagId && includeSubtags && subtagsDaTag.length > 0) {
@@ -133,7 +150,18 @@ export default function TransacoesPage() {
       list = list.filter((t) => t.data <= filterDataAte);
     }
     if (filterConta) {
-      list = list.filter((t) => t.conta === filterConta);
+      if (filterSomenteTransferencias) {
+        list = list.filter((t) => {
+          if (!isTransferenciaOrigem(t)) return false;
+          const destino = getContaDestinoTransferencia(t, transacoes);
+          return t.conta === filterConta || destino === filterConta;
+        });
+      } else {
+        list = list.filter((t) => t.conta === filterConta);
+      }
+    }
+    if (filterSomenteTransferencias) {
+      list = list.filter((t) => isTransferenciaOrigem(t));
     }
     if (mesEfetivoUrlOk && mesEfetivoUrl != null) {
       list = list.filter((t) => getMesEfetivo(t, contas) === mesEfetivoUrl);
@@ -152,13 +180,16 @@ export default function TransacoesPage() {
     filterDataDe,
     filterDataAte,
     filterConta,
+    filterSomenteTransferencias,
     contas,
   ]);
 
-  const totalFiltrado = useMemo(
-    () => transacoesFiltradas.reduce((s, t) => s + t.valor, 0),
-    [transacoesFiltradas]
-  );
+  const totalFiltrado = useMemo(() => {
+    if (filterSomenteTransferencias) {
+      return transacoesFiltradas.reduce((s, t) => s + Math.abs(t.valor), 0);
+    }
+    return transacoesFiltradas.reduce((s, t) => s + t.valor, 0);
+  }, [transacoesFiltradas, filterSomenteTransferencias]);
 
   const { transacoesNormais, parceladasGrupos } = useMemo(() => {
     const hoje = getLocalDateString();
@@ -166,19 +197,18 @@ export default function TransacoesPage() {
     const gruposOrdenados = Array.from(grupos.entries()).sort(
       ([, a], [, b]) => (b[0]?.data ?? "").localeCompare(a[0]?.data ?? "")
     );
-    // Parcelas com data ≤ hoje na lista; futuras só no modal Parceladas
-    const paraLista = sortTransacoesDesc(
-      filtrarTransacoesParaLista(
-        transacoesFiltradas.filter(
+    // Com filtro de transferências, lista só transferências (sem parcelas na lista)
+    const baseLista = filterSomenteTransferencias
+      ? transacoesFiltradas
+      : transacoesFiltradas.filter(
           (t) => !isParcelada(t.descricao) || t.data <= hoje
-        )
-      )
-    );
+        );
+    const paraLista = sortTransacoesDesc(filtrarTransacoesParaLista(baseLista));
     return {
       transacoesNormais: paraLista,
       parceladasGrupos: gruposOrdenados,
     };
-  }, [transacoesFiltradas]);
+  }, [transacoesFiltradas, filterSomenteTransferencias]);
 
   const parceladasTodosOrdenados = useMemo(() => {
     const grupos = groupParceladas(transacoes);
@@ -474,7 +504,19 @@ export default function TransacoesPage() {
               <ListFilter size={16} />
               {showAll ? "Ver recentes" : "Ver todas"}
             </button>
-            {transacoesFiltradas.length > 0 && (
+            <button
+              type="button"
+              onClick={toggleFiltroTransferencias}
+              className={`flex items-center gap-2 min-h-[36px] px-3 py-2 rounded-lg text-sm border ${
+                filterSomenteTransferencias
+                  ? "bg-brand-500/15 border-brand-500/40 text-brand-300"
+                  : "text-slate-300 hover:text-slate-100 hover:bg-slate-700/50 border-slate-600"
+              }`}
+            >
+              <ArrowLeftRight size={16} />
+              Transferências
+            </button>
+            {transacoesFiltradas.length > 0 && !filterSomenteTransferencias && (
               <button
                 type="button"
                 onClick={openBulkEdit}
@@ -484,7 +526,8 @@ export default function TransacoesPage() {
                 Editar tags em massa ({transacoesFiltradas.length})
               </button>
             )}
-            {(parceladasGruposAtivos.length > 0 || parceladasGruposEncerrados.length > 0) && (
+            {(parceladasGruposAtivos.length > 0 || parceladasGruposEncerrados.length > 0) &&
+              !filterSomenteTransferencias && (
               <button
                 type="button"
                 onClick={() => {
@@ -514,9 +557,11 @@ export default function TransacoesPage() {
         </div>
         {transacoesFiltradas.length === 0 ? (
           <div className="p-12 text-center text-slate-500">
-            {filterTagId || filterConta || searchDesc.trim() || mesEfetivoUrlOk
-              ? "Nenhuma transação encontrada com os filtros aplicados."
-              : "Nenhuma transação ainda. Clique em \"Nova\" para começar."}
+            {filterSomenteTransferencias
+              ? "Nenhuma transferência encontrada com os filtros aplicados."
+              : filterTagId || filterConta || searchDesc.trim() || mesEfetivoUrlOk
+                ? "Nenhuma transação encontrada com os filtros aplicados."
+                : "Nenhuma transação ainda. Clique em \"Nova\" para começar."}
           </div>
         ) : (
           <>
@@ -655,14 +700,19 @@ export default function TransacoesPage() {
             filterDataDe ||
             filterDataAte ||
             searchDesc.trim() ||
-            mesEfetivoUrlOk) && (
+            mesEfetivoUrlOk ||
+            filterSomenteTransferencias) && (
             <div className="p-4 border-t border-slate-700/50 flex justify-between items-center bg-slate-800/30">
               <span className="font-medium text-slate-300">
-                Total ({transacoesFiltradas.length} transações)
+                {filterSomenteTransferencias
+                  ? `Total (${transacoesFiltradas.length} transferências)`
+                  : `Total (${transacoesFiltradas.length} transações)`}
               </span>
               <span
                 className={`font-bold text-lg ${
-                  totalFiltrado >= 0 ? "text-brand-400" : "text-red-400"
+                  filterSomenteTransferencias || totalFiltrado >= 0
+                    ? "text-brand-400"
+                    : "text-red-400"
                 }`}
               >
                 {formatBRL(totalFiltrado)}

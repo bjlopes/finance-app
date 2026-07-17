@@ -1,25 +1,15 @@
 /**
- * Agent 15 — saldo por conta com transferências
+ * Agent 15 — carry-over de caixa a partir de julho/2026
+ *
+ * Contas de investimento NÃO entram no saldo acumulado — só aportes/resgates.
+ * Aportes reduzem o saldo da origem e entram no carry-over do mês seguinte.
+ * Movimentos anteriores a julho/2026 não são recalculados.
  */
 import { assert, section, approx, exitCode } from "./_helpers";
 import { getMesEfetivo } from "../../src/lib/fluxoCaixa";
+import { calcularSaldosContaMes } from "../../src/lib/transferencias";
 import type { Transacao } from "../../src/types";
 import type { ContaItem } from "../../src/context/DataContext";
-
-function saldoPorContaNoMes(
-  transacoes: Transacao[],
-  contas: ContaItem[],
-  mes: string,
-  contasAtivas: string[]
-): Record<string, number> {
-  let transacoesMes = transacoes.filter((t) => getMesEfetivo(t, contas) === mes);
-  transacoesMes = transacoesMes.filter((t) => contasAtivas.includes(t.conta));
-  const saldo: Record<string, number> = {};
-  transacoesMes.forEach((t) => {
-    saldo[t.conta] = (saldo[t.conta] || 0) + t.valor;
-  });
-  return saldo;
-}
 
 const contas: ContaItem[] = [
   { id: "1", nome: "Itaú" },
@@ -28,15 +18,16 @@ const contas: ContaItem[] = [
 ];
 
 const transacoes: Transacao[] = [
-  { id: "1", descricao: "Salário", valor: 3000, conta: "Itaú", data: "2025-06-01", tagIds: [] },
-  { id: "2", descricao: "Mercado", valor: -200, conta: "Itaú", data: "2025-06-05", tagIds: [] },
+  { id: "0", descricao: "Saldo antigo", valor: 9000, conta: "Itaú", data: "2026-06-28", tagIds: [] },
+  { id: "1", descricao: "Salário", valor: 3000, conta: "Itaú", data: "2026-07-01", tagIds: [] },
+  { id: "2", descricao: "Mercado", valor: -200, conta: "Itaú", data: "2026-07-05", tagIds: [] },
   {
     id: "3",
     descricao: "Pix",
     valor: -500,
     conta: "Itaú",
     contaDestino: "Nubank",
-    data: "2025-06-10",
+    data: "2026-07-10",
     tagIds: [],
     transferenciaId: "t1",
   },
@@ -45,7 +36,7 @@ const transacoes: Transacao[] = [
     descricao: "Pix",
     valor: 500,
     conta: "Nubank",
-    data: "2025-06-10",
+    data: "2026-07-10",
     tagIds: [],
     transferenciaId: "t1",
   },
@@ -55,7 +46,7 @@ const transacoes: Transacao[] = [
     valor: -300,
     conta: "Nubank",
     contaDestino: "Investimentos",
-    data: "2025-06-12",
+    data: "2026-07-12",
     tagIds: [],
     transferenciaId: "t2",
   },
@@ -64,25 +55,58 @@ const transacoes: Transacao[] = [
     descricao: "Aporte",
     valor: 300,
     conta: "Investimentos",
-    data: "2025-06-12",
+    data: "2026-07-12",
     tagIds: [],
     transferenciaId: "t2",
   },
 ];
 
-section("Transferências movem saldo entre contas");
-const saldo = saldoPorContaNoMes(transacoes, contas, "2025-06", ["Itaú", "Nubank", "Investimentos"]);
-assert(approx(saldo["Itaú"] ?? 0, 2300), "Itaú: 3000 - 200 - 500");
-assert(approx(saldo["Nubank"] ?? 0, 200), "Nubank: +500 - 300");
-assert(approx(saldo["Investimentos"] ?? 0, 300), "Investimentos: +300");
+function saldosNoMes(mes: string, contasAtivas: string[]) {
+  const transacoesMes = transacoes.filter(
+    (t) => getMesEfetivo(t, contas) === mes && contasAtivas.includes(t.conta)
+  );
+  return calcularSaldosContaMes(transacoes, transacoesMes, contas, mes, contasAtivas);
+}
 
-section("Soma total preservada");
-const total = Object.values(saldo).reduce((a, b) => a + b, 0);
-assert(approx(total, 2800), "total líquido = 3000 - 200");
+section("Julho é o marco e não recalcula meses anteriores");
+const julho = saldosNoMes("2026-07", ["Itaú", "Nubank", "Investimentos"]);
+assert(approx(julho.saldoInicial["Itaú"] ?? 0, 0), "saldo antigo de junho não entra");
+assert(approx(julho.movimentoMes["Itaú"] ?? 0, 2300), "Itaú: 3000 - 200 - 500");
+assert(approx(julho.saldoFinal["Itaú"] ?? 0, 2300), "Itaú final = movimento de julho");
+assert(approx(julho.saldoFinal["Nubank"] ?? 0, 200), "Nubank: +500 - 300 (aporte)");
+assert(julho.saldoFinal["Investimentos"] === undefined, "investimento sem saldo acumulado");
+assert(julho.movimentoMes["Investimentos"] === undefined, "aporte destino não entra no saldo de caixa");
+
+section("Saldo manual deve ser lançado no próprio mês");
+const julhoComSaldoManual: Transacao[] = [
+  { id: "manual", descricao: "Saldo inicial manual", valor: 1000, conta: "Itaú", data: "2026-07-01", tagIds: [] },
+  ...transacoes,
+];
+const transacoesJulhoComSaldo = julhoComSaldoManual.filter(
+  (t) => getMesEfetivo(t, contas) === "2026-07"
+);
+const saldoManual = calcularSaldosContaMes(
+  julhoComSaldoManual,
+  transacoesJulhoComSaldo,
+  contas,
+  "2026-07"
+);
+assert(approx(saldoManual.saldoFinal["Itaú"] ?? 0, 3300), "saldo manual + movimento do mês");
+
+section("Saldo final de julho vira inicial de agosto");
+const agosto = saldosNoMes("2026-08", ["Itaú", "Nubank", "Investimentos"]);
+assert(approx(agosto.saldoInicial["Itaú"] ?? 0, 2300), "Itaú herda julho");
+assert(approx(agosto.saldoInicial["Nubank"] ?? 0, 200), "Nubank herda julho já descontando aporte");
+assert(agosto.saldoInicial["Investimentos"] === undefined, "investimento não carrega saldo");
+assert(approx(agosto.saldoFinal["Nubank"] ?? 0, 200), "agosto sem movimento mantém Nubank");
+
+section("Total caixa de julho (sem investimento)");
+const totalCaixa = Object.values(julho.saldoFinal).reduce((a, b) => a + b, 0);
+assert(approx(totalCaixa, 2500), "caixa = 3000 - 200 - 300 aporte");
 
 section("Filtro de conta ativa");
-const soItau = saldoPorContaNoMes(transacoes, contas, "2025-06", ["Itaú"]);
-assert(soItau["Nubank"] === undefined, "Nubank fora do filtro");
-assert(approx(soItau["Itaú"] ?? 0, 2300), "Itaú isolado");
+const soItau = saldosNoMes("2026-07", ["Itaú"]);
+assert(soItau.saldoFinal["Nubank"] === undefined, "Nubank fora do filtro");
+assert(approx(soItau.saldoFinal["Itaú"] ?? 0, 2300), "Itaú isolado no mês");
 
 process.exit(exitCode());

@@ -1,5 +1,9 @@
 import type { Transacao } from "@/types";
 import type { ContaItem } from "@/context/DataContext";
+import { getMesEfetivo } from "@/lib/fluxoCaixa";
+
+/** Primeiro mês cujo saldo final alimenta o mês seguinte. */
+export const SALDO_CARRY_OVER_INICIO = "2026-07";
 
 export function isTransferencia(t: Transacao): boolean {
   return Boolean(t.transferenciaId);
@@ -72,6 +76,10 @@ export interface MovimentosInvestimento {
   resgates: number;
   qtdAportes: number;
   qtdResgates: number;
+  /** Perna de destino dos resgates (valor positivo na conta que recebe). */
+  transacoesResgate: Transacao[];
+  /** Perna de origem dos aportes (valor negativo na conta que envia). */
+  transacoesAporte: Transacao[];
 }
 
 /** Soma aportes (→ conta investimento) e resgates (← conta investimento) no mês. */
@@ -79,12 +87,15 @@ export function calcularMovimentosInvestimento(
   transacoes: Transacao[],
   contas: ContaItem[],
   mesYm: string,
-  mesEfetivoDe: (t: Transacao) => string
+  mesEfetivoDe: (t: Transacao) => string,
+  contasAtivas?: string[]
 ): MovimentosInvestimento {
   let aportes = 0;
   let resgates = 0;
   let qtdAportes = 0;
   let qtdResgates = 0;
+  const transacoesResgate: Transacao[] = [];
+  const transacoesAporte: Transacao[] = [];
 
   for (const t of transacoes) {
     if (!isTransferenciaOrigem(t)) continue;
@@ -93,30 +104,142 @@ export function calcularMovimentosInvestimento(
     const valor = Math.abs(t.valor);
     const destino = getContaDestinoTransferencia(t, transacoes);
     const origem = t.conta;
+    const par = getParTransferencia(t, transacoes);
+
+    if (contasAtivas) {
+      const origemAtiva = contasAtivas.includes(origem);
+      const destinoAtivo = Boolean(destino && contasAtivas.includes(destino));
+      if (!origemAtiva && !destinoAtivo) continue;
+    }
 
     if (destino && isContaInvestimento(destino, contas)) {
-      aportes += valor;
-      qtdAportes += 1;
+      if (!contasAtivas || contasAtivas.includes(origem)) {
+        aportes += valor;
+        qtdAportes += 1;
+        transacoesAporte.push(t);
+      }
     }
     if (isContaInvestimento(origem, contas)) {
-      resgates += valor;
-      qtdResgates += 1;
+      if (!contasAtivas || (destino && contasAtivas.includes(destino))) {
+        resgates += valor;
+        qtdResgates += 1;
+        if (par && par.valor > 0) transacoesResgate.push(par);
+        else if (destino) {
+          transacoesResgate.push({ ...t, valor, conta: destino });
+        }
+      }
     }
   }
 
-  return { aportes, resgates, qtdAportes, qtdResgates };
+  return { aportes, resgates, qtdAportes, qtdResgates, transacoesResgate, transacoesAporte };
+}
+
+/** Movimento líquido de cada conta no mês (inclui transferências e aportes). */
+export function calcularSaldoPorContaMes(
+  transacoesMes: Transacao[]
+): Record<string, number> {
+  const saldo: Record<string, number> = {};
+  for (const t of transacoesMes) {
+    saldo[t.conta] = (saldo[t.conta] || 0) + t.valor;
+  }
+  return saldo;
 }
 
 /**
- * Saldo do mês no dashboard: receitas − gastos reais, ajustado por investimentos.
- * Resgates voltam para o fluxo (+); aportes saem do fluxo (−), sem virar “gasto”.
+ * Remove contas de investimento do mapa de saldos.
+ * Investimentos só rastreiam aportes/resgates — sem saldo inicial/final.
  */
-export function calcularSaldoFluxoMes(
-  totalReceitas: number,
-  totalGastos: number,
-  investimento: MovimentosInvestimento
-): number {
-  return (
-    totalReceitas - totalGastos + investimento.resgates - investimento.aportes
+export function filtrarSaldosCaixa(
+  saldoPorConta: Record<string, number>,
+  contas: ContaItem[]
+): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(saldoPorConta).filter(([nome]) => !isContaInvestimento(nome, contas))
   );
+}
+
+export interface SaldosContaMes {
+  saldoInicial: Record<string, number>;
+  movimentoMes: Record<string, number>;
+  saldoFinal: Record<string, number>;
+}
+
+/**
+ * Saldo das contas de caixa no mês selecionado.
+ * Contas de investimento ficam de fora (só aparecem em aportes/resgates).
+ * Até o mês de início, usa apenas as transações do próprio mês.
+ * Depois dele, carrega somente movimentos a partir de SALDO_CARRY_OVER_INICIO,
+ * evitando recalcular retroativamente saldos que já foram lançados manualmente.
+ */
+export function calcularSaldosContaMes(
+  transacoes: Transacao[],
+  transacoesMes: Transacao[],
+  contas: ContaItem[],
+  mesYm: string,
+  contasAtivas?: string[]
+): SaldosContaMes {
+  const saldoInicial: Record<string, number> = {};
+  if (mesYm > SALDO_CARRY_OVER_INICIO) {
+    for (const t of transacoes) {
+      if (isContaInvestimento(t.conta, contas)) continue;
+      if (contasAtivas && !contasAtivas.includes(t.conta)) continue;
+      const mesEfetivo = getMesEfetivo(t, contas);
+      if (mesEfetivo < SALDO_CARRY_OVER_INICIO || mesEfetivo >= mesYm) continue;
+      saldoInicial[t.conta] = (saldoInicial[t.conta] || 0) + t.valor;
+    }
+  }
+
+  const movimentoMes = filtrarSaldosCaixa(
+    calcularSaldoPorContaMes(transacoesMes),
+    contas
+  );
+  const nomes = new Set([...Object.keys(saldoInicial), ...Object.keys(movimentoMes)]);
+  const saldoFinal: Record<string, number> = {};
+  for (const nome of Array.from(nomes)) {
+    saldoFinal[nome] = (saldoInicial[nome] || 0) + (movimentoMes[nome] || 0);
+  }
+  return { saldoInicial, movimentoMes, saldoFinal };
+}
+
+/**
+ * Soma o movimento das contas no mês.
+ * - patrimônio: todas as contas (transferências se cancelam entre si)
+ * - caixa: só contas não-investimento (= fluxo disponível; investimento fica de fora)
+ */
+export function somarSaldoPorContaMes(
+  saldoPorConta: Record<string, number>,
+  contas: ContaItem[],
+  modo: "patrimonio" | "caixa" = "patrimonio"
+): number {
+  return Object.entries(saldoPorConta).reduce((sum, [nome, valor]) => {
+    if (modo === "caixa" && isContaInvestimento(nome, contas)) return sum;
+    return sum + valor;
+  }, 0);
+}
+
+/**
+ * Receitas do dashboard: só entradas reais (custo de vida / renda).
+ * Resgates de investimento ficam na seção Investimentos.
+ */
+export function totalReceitasDashboard(receitasFluxo: number): number {
+  return receitasFluxo;
+}
+
+/**
+ * Gastos do dashboard: só saídas reais (custo de vida).
+ * Aportes para investimento ficam na seção Investimentos.
+ */
+export function totalGastosDashboard(gastosFluxo: number): number {
+  return gastosFluxo;
+}
+
+/**
+ * Saldo do mês no dashboard: receitas − gastos (fluxo real).
+ * Não inclui aportes nem resgates — esses movimentos são alocação de patrimônio.
+ */
+export function calcularSaldoMes(
+  totalReceitas: number,
+  totalGastos: number
+): number {
+  return totalReceitas - totalGastos;
 }
