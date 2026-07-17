@@ -71,16 +71,17 @@ export function isContaInvestimento(nome: string, contas: ContaItem[]): boolean 
   return Boolean(conta?.isInvestimento);
 }
 
-function normalizarInvestimentoLabel(label: string): string {
+function normalizarLabel(label: string): string {
   return label
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
 function isNomeTagInvestimento(nome: string): boolean {
-  const normalized = normalizarInvestimentoLabel(nome);
+  const normalized = normalizarLabel(nome);
   return normalized === "investimento" || normalized === "investimentos";
 }
 
@@ -306,4 +307,146 @@ export function calcularSaldoMes(
   totalGastos: number
 ): number {
   return totalReceitas - totalGastos;
+}
+
+export function isTagTransacoesInternas(tag: Tag): boolean {
+  const nome = normalizarLabel(tag.nome);
+  return (
+    nome === "transacoes internas" ||
+    nome === "transacao interna" ||
+    nome === "transferencias internas" ||
+    nome === "transferencia interna"
+  );
+}
+
+export function getTagIdsTransacoesInternas(tags: Tag[]): Set<string> {
+  return new Set(tags.filter(isTagTransacoesInternas).map((t) => t.id));
+}
+
+function hasTagId(t: Transacao, tagIds: Set<string>): boolean {
+  return t.tagIds.some((id) => tagIds.has(id));
+}
+
+function valorAbsCents(valor: number): number {
+  return Math.round(Math.abs(valor) * 100);
+}
+
+export interface ConversaoTransacoesInternasResult {
+  transacoes: Transacao[];
+  convertidas: number;
+  semPar: number;
+}
+
+export function hasTagTransacoesInternas(t: Transacao, tags: Tag[]): boolean {
+  const tagIds = getTagIdsTransacoesInternas(tags);
+  return tagIds.size > 0 && hasTagId(t, tagIds);
+}
+
+/**
+ * Converte lançamentos da tag "transações internas" em transferências reais.
+ * Emparelha saída (−) e entrada (+) com mesmo valor e data, contas diferentes.
+ * Pelo menos uma das pernas precisa ter a tag. Idempotente para pares já convertidos.
+ */
+export function converterTransacoesInternasParaTransferencias(
+  transacoes: Transacao[],
+  tags: Tag[],
+  newId: () => string = () => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return `tid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+): ConversaoTransacoesInternasResult {
+  const tagIds = getTagIdsTransacoesInternas(tags);
+  if (tagIds.size === 0) {
+    return { transacoes, convertidas: 0, semPar: 0 };
+  }
+
+  const candidatos = transacoes.filter(
+    (t) => !isTransferencia(t) && hasTagId(t, tagIds)
+  );
+  if (candidatos.length === 0) {
+    return { transacoes, convertidas: 0, semPar: 0 };
+  }
+
+  const usadas = new Set<string>();
+  const substituicoes = new Map<string, Transacao>();
+  let convertidas = 0;
+
+  const saidas = candidatos
+    .filter((t) => t.valor < 0)
+    .sort((a, b) => a.data.localeCompare(b.data) || a.id.localeCompare(b.id));
+
+  for (const origem of saidas) {
+    if (usadas.has(origem.id)) continue;
+
+    const valorCents = valorAbsCents(origem.valor);
+    const possiveis = transacoes.filter((t) => {
+      if (usadas.has(t.id) || t.id === origem.id) return false;
+      if (isTransferencia(t)) return false;
+      if (t.valor <= 0) return false;
+      if (t.data !== origem.data) return false;
+      if (t.conta === origem.conta) return false;
+      if (valorAbsCents(t.valor) !== valorCents) return false;
+      if (origem.contaDestino && t.conta !== origem.contaDestino) return false;
+      return hasTagId(origem, tagIds) || hasTagId(t, tagIds);
+    });
+
+    possiveis.sort((a, b) => {
+      const score = (t: Transacao) =>
+        (hasTagId(t, tagIds) ? 2 : 0) +
+        (t.descricao === origem.descricao ? 1 : 0) +
+        (origem.contaDestino === t.conta ? 3 : 0);
+      return score(b) - score(a) || a.id.localeCompare(b.id);
+    });
+
+    const destino = possiveis[0];
+    if (!destino) continue;
+
+    const transferenciaId = newId();
+    const descricao =
+      origem.descricao.trim() || destino.descricao.trim() || "Transferência";
+    const valor = Math.round(Math.abs(origem.valor) * 100) / 100;
+    const comentario = origem.comentario || destino.comentario;
+
+    const novaOrigem: Transacao = {
+      ...origem,
+      descricao,
+      valor: -valor,
+      conta: origem.conta,
+      contaDestino: destino.conta,
+      data: origem.data,
+      tagIds: [],
+      comentario,
+      transferenciaId,
+    };
+    const novaDestino: Transacao = {
+      ...destino,
+      descricao,
+      valor,
+      conta: destino.conta,
+      data: destino.data,
+      tagIds: [],
+      comentario,
+      transferenciaId,
+      contaDestino: undefined,
+    };
+
+    usadas.add(origem.id);
+    usadas.add(destino.id);
+    substituicoes.set(origem.id, novaOrigem);
+    substituicoes.set(destino.id, novaDestino);
+    convertidas += 1;
+  }
+
+  if (convertidas === 0) {
+    return { transacoes, convertidas: 0, semPar: candidatos.length };
+  }
+
+  const next = transacoes.map((t) => substituicoes.get(t.id) ?? t);
+  const semPar = next.filter(
+    (t) => !isTransferencia(t) && hasTagId(t, tagIds)
+  ).length;
+
+  return { transacoes: next, convertidas, semPar };
 }

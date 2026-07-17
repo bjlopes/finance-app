@@ -11,6 +11,10 @@ All notable changes to this project will be documented in this file.
   - Transações em conta de investimento ou com tag `investimento`/`investimentos` ficam exclusivamente na seção Investimentos
   - Aportes e resgates têm modal de detalhe ao tocar
   - Vale retroativamente para qualquer mês selecionado (cálculo a partir das transações)
+- **Migração: tag "transações internas" → transferências**
+  - Ao carregar os dados, pares com a tag (saída + entrada, mesmo valor/data, contas diferentes) viram transferências reais
+  - Deixam de entrar em gastos/receitas e passam a aparecer no filtro de Transferências
+  - Lançamentos órfãos da tag (sem par) também ficam fora do custo de vida
 - **Dashboard: saldo de caixa mensal**
   - Julho/2026 é o marco inicial: saldos anteriores não são recalculados
   - A partir de agosto/2026, o saldo final das contas de caixa vira o saldo inicial do mês seguinte
