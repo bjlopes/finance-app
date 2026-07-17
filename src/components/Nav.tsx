@@ -12,6 +12,7 @@ import {
   Tag,
   Wallet,
   Shield,
+  Sparkles,
   LogIn,
   LogOut,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import { useAuth } from "@/context/AuthContext";
 const links = [
   { href: "/", label: "Nova", icon: PlusCircle },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/insights", label: "Insights", icon: Sparkles },
   { href: "/transacoes", label: "Transações", icon: Receipt },
   { href: "/contas", label: "Contas", icon: Wallet },
   { href: "/tags", label: "Tags", icon: Tag },

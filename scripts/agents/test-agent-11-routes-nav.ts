@@ -12,11 +12,11 @@ section("Links do Nav");
 const navSrc = fs.readFileSync(NAV_PATH, "utf8");
 const hrefs = [...navSrc.matchAll(/href:\s*"([^"]+)"/g)].map((m) => m[1]);
 
-const expectedLinks = ["/", "/dashboard", "/transacoes", "/contas", "/tags", "/backup"];
+const expectedLinks = ["/", "/dashboard", "/insights", "/transacoes", "/contas", "/tags", "/backup"];
 for (const href of expectedLinks) {
   assert(hrefs.includes(href), `Nav tem link ${href}`);
 }
-assert(hrefs.length === expectedLinks.length, "6 links principais");
+assert(hrefs.length === expectedLinks.length, "7 links principais");
 
 section("Páginas correspondentes");
 for (const href of expectedLinks) {
@@ -30,6 +30,7 @@ for (const href of expectedLinks) {
 section("Labels e ícones");
 assert(navSrc.includes('label: "Nova"'), 'label "Nova"');
 assert(navSrc.includes('label: "Dashboard"'), 'label "Dashboard"');
+assert(navSrc.includes('label: "Insights"'), 'label "Insights"');
 assert(navSrc.includes("PlusCircle"), "ícone Nova");
 assert(navSrc.includes("LayoutDashboard"), "ícone Dashboard");
 assert(navSrc.includes('aria-label="Abrir menu"'), "acessibilidade menu mobile");

@@ -23,6 +23,13 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Insights financeiros**
+  - Nova aba com custo de vida típico por mediana dos últimos seis meses
+  - Detecta e remove gastos pontuais/outliers da estimativa (sem removê-los do gasto real)
+  - Compara categorias e o mês atual com o padrão histórico
+  - Estima receita, folga e taxa de poupança típicas com nível de confiança
+  - Não mistura investimentos, transferências ou transações internas
+
 - **Installments (parceladas)**
   - "Encerradas" tab in the parceladas modal for groups where every installment’s bill due date is in the past; open groups remain under "Em aberto"
   - Parceladas button shows counts for open and closed groups when both exist
