@@ -1,5 +1,5 @@
 import { getMesEfetivo } from "@/lib/fluxoCaixa";
-import { isFluxoReal } from "@/lib/transferencias";
+import { isFluxoReal, isTransacaoInvestimento } from "@/lib/transferencias";
 import type { ContaItem } from "@/context/DataContext";
 import type { Transacao, Tag } from "@/types";
 
@@ -23,16 +23,16 @@ export function calcMesStats(
   );
 
   const totalGastos = transacoesMes
-    .filter((t) => t.valor < 0 && isFluxoReal(t))
+    .filter((t) => t.valor < 0 && isFluxoReal(t) && !isTransacaoInvestimento(t, contas, tags))
     .reduce((sum, t) => sum + t.valor, 0);
 
   const totalReceitas = transacoesMes
-    .filter((t) => t.valor > 0 && isFluxoReal(t))
+    .filter((t) => t.valor > 0 && isFluxoReal(t) && !isTransacaoInvestimento(t, contas, tags))
     .reduce((sum, t) => sum + t.valor, 0);
 
   const porTag: Record<string, number> = {};
   transacoesMes
-    .filter((t) => t.valor < 0 && isFluxoReal(t))
+    .filter((t) => t.valor < 0 && isFluxoReal(t) && !isTransacaoInvestimento(t, contas, tags))
     .forEach((t) => {
       t.tagIds.forEach((tagId) => {
         const tag = tags.find((tg) => tg.id === tagId);

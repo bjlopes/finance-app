@@ -8,7 +8,8 @@ All notable changes to this project will be documented in this file.
 
 - **Dashboard: custo de vida separado de investimentos**
   - Gastos, Receitas e Saldo do mês passam a refletir só o fluxo real (sem aportes/resgates)
-  - Aportes e resgates ficam exclusivamente na seção Investimentos, com modal de detalhe ao tocar
+  - Transações em conta de investimento ou com tag `investimento`/`investimentos` ficam exclusivamente na seção Investimentos
+  - Aportes e resgates têm modal de detalhe ao tocar
   - Vale retroativamente para qualquer mês selecionado (cálculo a partir das transações)
 - **Dashboard: saldo de caixa mensal**
   - Julho/2026 é o marco inicial: saldos anteriores não são recalculados

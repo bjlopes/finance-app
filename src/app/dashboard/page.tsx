@@ -8,7 +8,7 @@ import { DonutChart } from "@/components/DonutChart";
 import Link from "next/link";
 import { useData } from "@/context/DataContext";
 import { getMesEfetivo } from "@/lib/fluxoCaixa";
-import { isFluxoReal, isContaInvestimento, calcularMovimentosInvestimento, calcularSaldoMes, calcularSaldosContaMes, somarSaldoPorContaMes, totalReceitasDashboard, totalGastosDashboard, getContaDestinoTransferencia, getContaOrigemTransferencia } from "@/lib/transferencias";
+import { isFluxoReal, isTransacaoInvestimento, isContaInvestimento, calcularMovimentosInvestimento, calcularSaldoMes, calcularSaldosContaMes, somarSaldoPorContaMes, totalReceitasDashboard, totalGastosDashboard, getContaDestinoTransferencia, getContaOrigemTransferencia } from "@/lib/transferencias";
 import { formatLocalDate } from "@/lib/dateUtils";
 import { compareTransacoesDesc } from "@/lib/transacoes-utils";
 
@@ -92,8 +92,12 @@ export default function DashboardPage() {
     );
     transacoesMes = transacoesMes.filter((t) => contasAtivas.includes(t.conta));
 
-    const gastos = transacoesMes.filter((t) => t.valor < 0 && isFluxoReal(t));
-    const receitas = transacoesMes.filter((t) => t.valor > 0 && isFluxoReal(t));
+    const gastos = transacoesMes.filter(
+      (t) => t.valor < 0 && isFluxoReal(t) && !isTransacaoInvestimento(t, contas, tags)
+    );
+    const receitas = transacoesMes.filter(
+      (t) => t.valor > 0 && isFluxoReal(t) && !isTransacaoInvestimento(t, contas, tags)
+    );
     const gastosFluxo = gastos.reduce((sum, t) => sum + Math.abs(t.valor), 0);
     const receitasFluxo = receitas.reduce((sum, t) => sum + t.valor, 0);
 
@@ -103,7 +107,8 @@ export default function DashboardPage() {
       contas,
       mesSelecionado,
       (t) => getMesEfetivo(t, contas),
-      contasAtivas
+      contasAtivas,
+      tags
     );
 
     const totalGastos = totalGastosDashboard(gastosFluxo);

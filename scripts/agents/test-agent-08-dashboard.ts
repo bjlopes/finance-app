@@ -5,6 +5,7 @@ import { assert, section, approx, exitCode } from "./_helpers";
 import { getMesEfetivo } from "../../src/lib/fluxoCaixa";
 import {
   isFluxoReal,
+  isTransacaoInvestimento,
   calcularMovimentosInvestimento,
   calcularSaldoMes,
   calcularSaldosContaMes,
@@ -28,8 +29,12 @@ function calcDashboardStats(
   );
   transacoesMes = transacoesMes.filter((t) => contasAtivas.includes(t.conta));
 
-  const gastos = transacoesMes.filter((t) => t.valor < 0 && isFluxoReal(t));
-  const receitas = transacoesMes.filter((t) => t.valor > 0 && isFluxoReal(t));
+  const gastos = transacoesMes.filter(
+    (t) => t.valor < 0 && isFluxoReal(t) && !isTransacaoInvestimento(t, contas, tags)
+  );
+  const receitas = transacoesMes.filter(
+    (t) => t.valor > 0 && isFluxoReal(t) && !isTransacaoInvestimento(t, contas, tags)
+  );
   const gastosFluxo = gastos.reduce((sum, t) => sum + Math.abs(t.valor), 0);
   const receitasFluxo = receitas.reduce((sum, t) => sum + t.valor, 0);
 
@@ -54,7 +59,8 @@ function calcDashboardStats(
     contas,
     mesSelecionado,
     (t) => getMesEfetivo(t, contas),
-    contasAtivas
+    contasAtivas,
+    tags
   );
 
   const totalGastos = totalGastosDashboard(gastosFluxo);
@@ -85,6 +91,7 @@ const contas: ContaItem[] = [
 const tags: Tag[] = [
   { id: "t1", nome: "transporte", cor: "#3b82f6" },
   { id: "t2", nome: "casa", cor: "#8b5cf6" },
+  { id: "t3", nome: "investimento", cor: "#22c55e" },
 ];
 
 const transacoes: Transacao[] = [
@@ -123,6 +130,25 @@ assert(approx(stats.somaCaixaMes, 1950), "caixa = nubank após aporte");
 assert(approx(stats.receitasFluxo - stats.gastosFluxo, 2950), "fluxo real bate com saldo de vida");
 assert(approx(stats.investimento.aportes, 1000), "aporte separado em investimentos");
 assert(stats.saldoFinalPorConta["Investimentos"] === undefined, "investimento sem saldo acumulado");
+
+section("Tag investimento também separa meses antigos");
+const legadoComTag = calcDashboardStats(
+  [
+    { id: "old-1", descricao: "Aporte legado", valor: -700, conta: "Nubank", data: "2025-02-10", tagIds: ["t3"] },
+    { id: "old-2", descricao: "Resgate legado", valor: 200, conta: "Nubank", data: "2025-02-20", tagIds: ["t3"] },
+    { id: "old-3", descricao: "Mercado", valor: -100, conta: "Nubank", data: "2025-02-22", tagIds: ["t2"] },
+  ],
+  tags,
+  contas,
+  "2025-02",
+  ["Nubank", "Investimentos"]
+);
+assert(approx(legadoComTag.totalGastos, 100), "tag investimento não entra em gastos");
+assert(approx(legadoComTag.totalReceitas, 0), "tag investimento não entra em receitas");
+assert(approx(legadoComTag.saldo, -100), "saldo de vida ignora investimento por tag");
+assert(approx(legadoComTag.investimento.aportes, 700), "aporte por tag");
+assert(approx(legadoComTag.investimento.resgates, 200), "resgate por tag");
+assert(approx(legadoComTag.somaCaixaMes, -600), "saldo de caixa inclui aporte/resgate tagged");
 
 section("Resgate não entra em receitas; fica em Investimentos");
 const comResgate = calcDashboardStats(

@@ -1,4 +1,4 @@
-import type { Transacao } from "@/types";
+import type { Transacao, Tag } from "@/types";
 import type { ContaItem } from "@/context/DataContext";
 import { getMesEfetivo } from "@/lib/fluxoCaixa";
 
@@ -71,6 +71,44 @@ export function isContaInvestimento(nome: string, contas: ContaItem[]): boolean 
   return Boolean(conta?.isInvestimento);
 }
 
+function normalizarInvestimentoLabel(label: string): string {
+  return label
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function isNomeTagInvestimento(nome: string): boolean {
+  const normalized = normalizarInvestimentoLabel(nome);
+  return normalized === "investimento" || normalized === "investimentos";
+}
+
+function isTagOuAncestralInvestimento(
+  tagId: string,
+  tags: Tag[] = [],
+  visitados = new Set<string>()
+): boolean {
+  if (visitados.has(tagId)) return false;
+  visitados.add(tagId);
+  const tag = tags.find((t) => t.id === tagId);
+  if (!tag) return false;
+  if (isNomeTagInvestimento(tag.nome)) return true;
+  return Boolean(tag.parentId && isTagOuAncestralInvestimento(tag.parentId, tags, visitados));
+}
+
+export function hasTagInvestimento(t: Transacao, tags: Tag[] = []): boolean {
+  return t.tagIds.some((tagId) => isTagOuAncestralInvestimento(tagId, tags));
+}
+
+export function isTransacaoInvestimento(
+  t: Transacao,
+  contas: ContaItem[],
+  tags: Tag[] = []
+): boolean {
+  return isContaInvestimento(t.conta, contas) || hasTagInvestimento(t, tags);
+}
+
 export interface MovimentosInvestimento {
   aportes: number;
   resgates: number;
@@ -88,7 +126,8 @@ export function calcularMovimentosInvestimento(
   contas: ContaItem[],
   mesYm: string,
   mesEfetivoDe: (t: Transacao) => string,
-  contasAtivas?: string[]
+  contasAtivas?: string[],
+  tags: Tag[] = []
 ): MovimentosInvestimento {
   let aportes = 0;
   let resgates = 0;
@@ -98,35 +137,60 @@ export function calcularMovimentosInvestimento(
   const transacoesAporte: Transacao[] = [];
 
   for (const t of transacoes) {
-    if (!isTransferenciaOrigem(t)) continue;
     if (mesEfetivoDe(t) !== mesYm) continue;
 
     const valor = Math.abs(t.valor);
-    const destino = getContaDestinoTransferencia(t, transacoes);
     const origem = t.conta;
-    const par = getParTransferencia(t, transacoes);
 
     if (contasAtivas) {
+      const destino = getContaDestinoTransferencia(t, transacoes);
       const origemAtiva = contasAtivas.includes(origem);
       const destinoAtivo = Boolean(destino && contasAtivas.includes(destino));
       if (!origemAtiva && !destinoAtivo) continue;
     }
 
-    if (destino && isContaInvestimento(destino, contas)) {
+    if (isTransferenciaOrigem(t)) {
+      const destino = getContaDestinoTransferencia(t, transacoes);
+      const par = getParTransferencia(t, transacoes);
+      const destinoInvestimento = Boolean(destino && isContaInvestimento(destino, contas));
+      const origemInvestimento = isContaInvestimento(origem, contas);
+      const tagInvestimento = hasTagInvestimento(t, tags);
+
+      if ((destinoInvestimento || tagInvestimento) && !origemInvestimento) {
+        if (!contasAtivas || contasAtivas.includes(origem)) {
+          aportes += valor;
+          qtdAportes += 1;
+          transacoesAporte.push(t);
+        }
+      }
+      if (origemInvestimento) {
+        if (!contasAtivas || (destino && contasAtivas.includes(destino))) {
+          resgates += valor;
+          qtdResgates += 1;
+          if (par && par.valor > 0) transacoesResgate.push(par);
+          else if (destino) {
+            transacoesResgate.push({ ...t, valor, conta: destino });
+          }
+        }
+      }
+      continue;
+    }
+
+    if (isTransferenciaDestino(t)) continue;
+    if (!isTransacaoInvestimento(t, contas, tags)) continue;
+
+    if (t.valor < 0) {
       if (!contasAtivas || contasAtivas.includes(origem)) {
         aportes += valor;
         qtdAportes += 1;
         transacoesAporte.push(t);
       }
     }
-    if (isContaInvestimento(origem, contas)) {
-      if (!contasAtivas || (destino && contasAtivas.includes(destino))) {
+    if (t.valor > 0) {
+      if (!contasAtivas || contasAtivas.includes(origem)) {
         resgates += valor;
         qtdResgates += 1;
-        if (par && par.valor > 0) transacoesResgate.push(par);
-        else if (destino) {
-          transacoesResgate.push({ ...t, valor, conta: destino });
-        }
+        transacoesResgate.push(t);
       }
     }
   }

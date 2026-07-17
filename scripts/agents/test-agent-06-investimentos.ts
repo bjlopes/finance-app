@@ -10,11 +10,17 @@ import {
   isContaInvestimento,
 } from "../../src/lib/transferencias";
 import type { Transacao } from "../../src/types";
+import type { Tag } from "../../src/types";
 import type { ContaItem } from "../../src/context/DataContext";
 
 const contas: ContaItem[] = [
   { id: "c1", nome: "Nubank" },
   { id: "c2", nome: "Investimentos", isInvestimento: true },
+];
+
+const tags: Tag[] = [
+  { id: "tag-invest", nome: "investimentos", cor: "#22c55e" },
+  { id: "tag-cdb", nome: "CDB", parentId: "tag-invest", cor: "#22c55e" },
 ];
 
 const aporteOrigem: Transacao = {
@@ -82,6 +88,36 @@ const soInvestimentos = calcularMovimentosInvestimento(
 );
 assert(soInvestimentos.aportes === 0, "aporte sem origem ativa não conta");
 assert(soInvestimentos.resgates === 0, "resgate sem destino ativo não conta");
+
+section("Tag investimento");
+const aportePorTag: Transacao = {
+  id: "tag-a",
+  descricao: "CDB antigo",
+  valor: -700,
+  conta: "Nubank",
+  data: "2025-06-12",
+  tagIds: ["tag-cdb"],
+};
+const resgatePorTag: Transacao = {
+  id: "tag-r",
+  descricao: "Resgate antigo",
+  valor: 200,
+  conta: "Nubank",
+  data: "2025-06-22",
+  tagIds: ["tag-invest"],
+};
+const movTag = calcularMovimentosInvestimento(
+  [aportePorTag, resgatePorTag],
+  contas,
+  "2025-06",
+  (t) => t.data.slice(0, 7),
+  ["Nubank"],
+  tags
+);
+assert(movTag.aportes === 700, "aporte por tag/subtag investimento");
+assert(movTag.resgates === 200, "resgate por tag investimento");
+assert(movTag.transacoesAporte.length === 1, "transação de aporte por tag listada");
+assert(movTag.transacoesResgate.length === 1, "transação de resgate por tag listada");
 
 section("Saldo do mês sem misturar investimentos");
 const receitasFluxo = 5000;
