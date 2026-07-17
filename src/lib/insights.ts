@@ -14,6 +14,7 @@ export interface InsightPontual {
   data: string;
   categoria: string;
   motivo: string;
+  tipo: "gasto" | "entrada";
 }
 
 export interface InsightCategoria {
@@ -167,19 +168,51 @@ export function calcularInsightsFinanceiros(
   const despesasBase = despesas.filter((t) =>
     mesesBase.includes(getMesEfetivo(t, contas))
   );
-
-  const mesesPorDescricao = new Map<string, Set<string>>();
-  for (const t of despesasBase) {
-    const chave = normalizar(t.descricao);
-    if (!mesesPorDescricao.has(chave)) mesesPorDescricao.set(chave, new Set());
-    mesesPorDescricao.get(chave)!.add(getMesEfetivo(t, contas));
-  }
-
-  const medianaTransacao = mediana(
-    despesasBase.map((t) => Math.abs(t.valor)).filter((v) => v > 0)
+  const receitasBase = receitas.filter((t) =>
+    mesesBase.includes(getMesEfetivo(t, contas))
   );
 
-  const isPontual = (t: Transacao): { pontual: boolean; motivo: string } => {
+  function buildMesesPorDescricao(itens: Transacao[]): Map<string, Set<string>> {
+    const mapa = new Map<string, Set<string>>();
+    for (const t of itens) {
+      const chave = normalizar(t.descricao);
+      if (!mapa.has(chave)) mapa.set(chave, new Set());
+      mapa.get(chave)!.add(getMesEfetivo(t, contas));
+    }
+    return mapa;
+  }
+
+  const mesesPorDescricaoDespesa = buildMesesPorDescricao(despesasBase);
+  const mesesPorDescricaoReceita = buildMesesPorDescricao(receitasBase);
+
+  const medianaDespesa = mediana(
+    despesasBase.map((t) => Math.abs(t.valor)).filter((v) => v > 0)
+  );
+  const medianaReceitaReferencia = (() => {
+    const frequentes = receitasBase.filter((t) => {
+      const ocorrencias =
+        mesesPorDescricaoReceita.get(normalizar(t.descricao))?.size ?? 0;
+      return (
+        t.recorrente ||
+        temTagNome(t, tags, ["recorrente"]) ||
+        ocorrencias >= 3
+      );
+    });
+    const valores = frequentes
+      .map((t) => Math.abs(t.valor))
+      .filter((v) => v > 0);
+    if (valores.length > 0) return mediana(valores);
+    return mediana(
+      receitasBase.map((t) => Math.abs(t.valor)).filter((v) => v > 0)
+    );
+  })();
+
+  const isPontual = (
+    t: Transacao,
+    mesesPorDescricao: Map<string, Set<string>>,
+    medianaValor: number,
+    tipo: InsightPontual["tipo"]
+  ): { pontual: boolean; motivo: string } => {
     if (temTagNome(t, tags, ["pontual"])) {
       return { pontual: true, motivo: "Marcado como pontual" };
     }
@@ -188,7 +221,8 @@ export function calcularInsightsFinanceiros(
     }
     const ocorrencias =
       mesesPorDescricao.get(normalizar(t.descricao))?.size ?? 0;
-    const limite = Math.max(500, medianaTransacao * 2.5);
+    const multiplicador = tipo === "entrada" ? 1.5 : 2.5;
+    const limite = Math.max(500, medianaValor * multiplicador);
     if (Math.abs(t.valor) >= limite && ocorrencias <= 2) {
       return {
         pontual: true,
@@ -198,25 +232,50 @@ export function calcularInsightsFinanceiros(
     return { pontual: false, motivo: "" };
   };
 
-  const pontuaisBase = new Map<string, InsightPontual>();
-  for (const t of despesasBase) {
-    const classificacao = isPontual(t);
-    if (!classificacao.pontual) continue;
-    pontuaisBase.set(t.id, {
-      id: t.id,
-      descricao: t.descricao,
-      valor: Math.abs(t.valor),
-      data: t.data,
-      categoria: getCategoria(t, tags),
-      motivo: classificacao.motivo,
-    });
+  function coletarPontuaisBase(
+    itens: Transacao[],
+    mesesPorDescricao: Map<string, Set<string>>,
+    medianaValor: number,
+    tipo: InsightPontual["tipo"]
+  ): Map<string, InsightPontual> {
+    const mapa = new Map<string, InsightPontual>();
+    for (const t of itens) {
+      const classificacao = isPontual(t, mesesPorDescricao, medianaValor, tipo);
+      if (!classificacao.pontual) continue;
+      mapa.set(t.id, {
+        id: t.id,
+        descricao: t.descricao,
+        valor: Math.abs(t.valor),
+        data: t.data,
+        categoria: getCategoria(t, tags),
+        motivo: classificacao.motivo,
+        tipo,
+      });
+    }
+    return mapa;
   }
+
+  const pontuaisDespesaBase = coletarPontuaisBase(
+    despesasBase,
+    mesesPorDescricaoDespesa,
+    medianaDespesa,
+    "gasto"
+  );
+  const pontuaisReceitaBase = coletarPontuaisBase(
+    receitasBase,
+    mesesPorDescricaoReceita,
+    medianaReceitaReferencia,
+    "entrada"
+  );
+  const pontuaisBase = new Map<string, InsightPontual>();
+  pontuaisDespesaBase.forEach((pontual, id) => pontuaisBase.set(id, pontual));
+  pontuaisReceitaBase.forEach((pontual, id) => pontuaisBase.set(id, pontual));
 
   const totaisMesBase = mesesBase.map((mes) =>
     despesasBase
       .filter(
         (t) =>
-          getMesEfetivo(t, contas) === mes && !pontuaisBase.has(t.id)
+          getMesEfetivo(t, contas) === mes && !pontuaisDespesaBase.has(t.id)
       )
       .reduce((soma, t) => soma + Math.abs(t.valor), 0)
   );
@@ -228,8 +287,11 @@ export function calcularInsightsFinanceiros(
     .filter((t) => getMesEfetivo(t, contas) === mesReferencia)
     .reduce((soma, t) => soma + Math.abs(t.valor), 0);
   const receitasMesBase = mesesBase.map((mes) =>
-    receitas
-      .filter((t) => getMesEfetivo(t, contas) === mes)
+    receitasBase
+      .filter(
+        (t) =>
+          getMesEfetivo(t, contas) === mes && !pontuaisReceitaBase.has(t.id)
+      )
       .reduce((soma, t) => soma + t.valor, 0)
   );
   const receitaTipica = mediana(receitasMesBase);
@@ -240,18 +302,48 @@ export function calcularInsightsFinanceiros(
   const despesasMesAtual = despesas.filter(
     (t) => getMesEfetivo(t, contas) === mesReferencia
   );
-  const pontuaisDoMes = despesasMesAtual
-    .map((t) => ({ t, classificacao: isPontual(t) }))
-    .filter(({ classificacao }) => classificacao.pontual)
-    .map(({ t, classificacao }) => ({
-      id: t.id,
-      descricao: t.descricao,
-      valor: Math.abs(t.valor),
-      data: t.data,
-      categoria: getCategoria(t, tags),
-      motivo: classificacao.motivo,
-    }))
-    .sort((a, b) => b.valor - a.valor);
+  const receitasMesAtual = receitas.filter(
+    (t) => getMesEfetivo(t, contas) === mesReferencia
+  );
+
+  function coletarPontuaisMes(
+    itens: Transacao[],
+    mesesPorDescricao: Map<string, Set<string>>,
+    medianaValor: number,
+    tipo: InsightPontual["tipo"]
+  ): InsightPontual[] {
+    return itens
+      .map((t) => ({
+        t,
+        classificacao: isPontual(t, mesesPorDescricao, medianaValor, tipo),
+      }))
+      .filter(({ classificacao }) => classificacao.pontual)
+      .map(({ t, classificacao }) => ({
+        id: t.id,
+        descricao: t.descricao,
+        valor: Math.abs(t.valor),
+        data: t.data,
+        categoria: getCategoria(t, tags),
+        motivo: classificacao.motivo,
+        tipo,
+      }))
+      .sort((a, b) => b.valor - a.valor);
+  }
+
+  const pontuaisDoMes = [
+    ...coletarPontuaisMes(
+      despesasMesAtual,
+      mesesPorDescricaoDespesa,
+      medianaDespesa,
+      "gasto"
+    ),
+    ...coletarPontuaisMes(
+      receitasMesAtual,
+      mesesPorDescricaoReceita,
+      medianaReceitaReferencia,
+      "entrada"
+    ),
+  ].sort((a, b) => b.valor - a.valor);
 
   const categoriasNomes = new Set(
     [...despesasBase, ...despesasMesAtual].map((t) => getCategoria(t, tags))
@@ -264,7 +356,7 @@ export function calcularInsightsFinanceiros(
             (t) =>
               getMesEfetivo(t, contas) === mes &&
               getCategoria(t, tags) === nome &&
-              !pontuaisBase.has(t.id)
+              !pontuaisDespesaBase.has(t.id)
           )
           .reduce((soma, t) => soma + Math.abs(t.valor), 0)
       );
@@ -302,9 +394,16 @@ export function calcularInsightsFinanceiros(
       mensagens.push("O mês está próximo do seu padrão normal de gastos.");
     }
   }
-  if (pontuaisDoMes.length > 0) {
+  const pontuaisGastoMes = pontuaisDoMes.filter((p) => p.tipo === "gasto");
+  const pontuaisEntradaMes = pontuaisDoMes.filter((p) => p.tipo === "entrada");
+  if (pontuaisGastoMes.length > 0) {
     mensagens.push(
-      `${pontuaisDoMes.length} gasto(s) pontual(is) podem explicar parte da variação do mês.`
+      `${pontuaisGastoMes.length} gasto(s) pontual(is) podem explicar parte da variação do mês.`
+    );
+  }
+  if (pontuaisEntradaMes.length > 0) {
+    mensagens.push(
+      `${pontuaisEntradaMes.length} entrada(s) pontual(is) não entram na receita típica.`
     );
   }
   const categoriaAlta = categorias.find(

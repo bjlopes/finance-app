@@ -53,6 +53,14 @@ for (let mes = 1; mes <= 6; mes++) {
 
 transacoes.push(
   {
+    id: "bonus",
+    descricao: "Bônus anual",
+    valor: 10000,
+    conta: "Nubank",
+    data: "2026-03-01",
+    tagIds: [],
+  },
+  {
     id: "loan",
     descricao: "Quitação empréstimo",
     valor: -10000,
@@ -120,6 +128,10 @@ assert(insights.confianca === "alta", "confiança alta");
 
 section("Exclusões");
 assert(insights.pontuaisExcluidos.some((p) => p.id === "loan"), "empréstimo excluído");
+assert(
+  insights.pontuaisExcluidos.some((p) => p.id === "bonus" && p.tipo === "entrada"),
+  "bônus excluído da receita típica"
+);
 assert(!insights.pontuaisExcluidos.some((p) => p.id === "aporte"), "aporte nem entra na base");
 assert(!insights.pontuaisExcluidos.some((p) => p.id === "interna"), "interna nem entra na base");
 

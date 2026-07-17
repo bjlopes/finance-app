@@ -241,11 +241,11 @@ export default function InsightsPage() {
                 Pontuais e outliers
               </h2>
               <p className="mt-1 text-xs text-slate-500">
-                Excluídos da estimativa típica; continuam no gasto real do mês
+                Excluídos da estimativa típica; continuam no fluxo real do mês
               </p>
               {insights.pontuaisDoMes.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-500">
-                  Nenhum gasto pontual relevante detectado neste mês.
+                  Nenhum lançamento pontual relevante detectado neste mês.
                 </p>
               ) : (
                 <ul className="mt-4 space-y-3">
@@ -260,10 +260,16 @@ export default function InsightsPage() {
                             {item.descricao}
                           </p>
                           <p className="mt-0.5 text-xs text-slate-500">
+                            {item.tipo === "entrada" ? "Entrada" : "Gasto"} ·{" "}
                             {item.categoria} · {item.motivo}
                           </p>
                         </div>
-                        <span className="shrink-0 text-sm font-medium text-amber-400">
+                        <span
+                          className={`shrink-0 text-sm font-medium ${
+                            item.tipo === "entrada" ? "text-sky-400" : "text-amber-400"
+                          }`}
+                        >
+                          {item.tipo === "entrada" ? "+" : ""}
                           {formatBRL(item.valor)}
                         </span>
                       </div>
@@ -284,8 +290,8 @@ export default function InsightsPage() {
 
           <p className="text-center text-xs text-slate-600">
             Método: mediana dos últimos 6 meses com dados, removendo investimentos,
-            transferências internas e valores pontuais. Revise as tags “pontual” e
-            “recorrente” para melhorar a precisão.
+            transferências internas e lançamentos pontuais (gastos e entradas).
+            Revise as tags “pontual” e “recorrente” para melhorar a precisão.
           </p>
         </>
       )}
