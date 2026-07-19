@@ -16,7 +16,10 @@ import {
   type UserData,
 } from "@/lib/store-remote";
 import type { TransferenciaInput } from "@/lib/transferencias";
-import { converterTransacoesInternasParaTransferencias } from "@/lib/transferencias";
+import {
+  converterTransacoesInternasParaTransferencias,
+  migrarContasCartoesPagamento,
+} from "@/lib/transferencias";
 import { useAuth } from "@/context/AuthContext";
 
 export interface ContaItem {
@@ -86,7 +89,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
         if (hasRemoteData) {
           const tagsToUse = data!.tags.length ? data!.tags : store.getTags();
-          const contasToUse = data!.contas.length ? data!.contas : store.getContas();
+          const contasBase = data!.contas.length ? data!.contas : store.getContas();
+          const migracaoContas = migrarContasCartoesPagamento(contasBase);
+          const contasToUse = migracaoContas.contas;
           const migracao = converterTransacoesInternasParaTransferencias(
             data!.transacoes,
             tagsToUse
@@ -100,7 +105,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           setTransacoes(transacoesToUse);
           setTags(tagsToUse);
           setContas(contasToUse);
-          if (migracao.convertidas > 0) {
+          if (migracao.convertidas > 0 || migracaoContas.alteradas > 0) {
             await persistToRemote({
               transacoes: transacoesToUse,
               tags: tagsToUse,
@@ -108,6 +113,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             });
           }
         } else if (hasLocalData) {
+          const migracaoContas = migrarContasCartoesPagamento(localData.contas);
           const migracao = converterTransacoesInternasParaTransferencias(
             localData.transacoes,
             localData.tags
@@ -115,6 +121,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           const localMigrado = {
             ...localData,
             transacoes: migracao.transacoes,
+            contas: migracaoContas.contas,
           };
           store.setFullData(localMigrado);
           await persistToRemote(localMigrado);
@@ -128,15 +135,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         const tagsLocal = store.getTags();
+        const migracaoContas = migrarContasCartoesPagamento(store.getContas());
         const migracao = converterTransacoesInternasParaTransferencias(
           store.getTransacoes(),
           tagsLocal
         );
-        if (migracao.convertidas > 0) {
+        if (migracao.convertidas > 0 || migracaoContas.alteradas > 0) {
           store.setFullData({
             transacoes: migracao.transacoes,
             tags: tagsLocal,
-            contas: store.getContas(),
+            contas: migracaoContas.contas,
           });
         }
         setTransacoes(store.getTransacoes());
@@ -298,11 +306,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const importAndSync = useCallback(
     async (data: UserData) => {
+      const migracaoContas = migrarContasCartoesPagamento(data.contas);
       const migracao = converterTransacoesInternasParaTransferencias(
         data.transacoes,
         data.tags
       );
-      const next = { ...data, transacoes: migracao.transacoes };
+      const next = {
+        ...data,
+        transacoes: migracao.transacoes,
+        contas: migracaoContas.contas,
+      };
       store.setFullData(next);
       setTransacoes(next.transacoes);
       setTags(next.tags);

@@ -21,6 +21,7 @@ All notable changes to this project will be documented in this file.
   - Carry-over vale para contas correntes e Flash (não cartão / não investimento)
   - Cartões de crédito mostram só a fatura do mês — sem saldo acumulado
   - Cartão com conta de pagamento (ex. Ultraviolet → Nubank, dia 14) debita a fatura dessa conta
+  - Migração automática: contas "Ultraviolet"/"Cartão Itaú" já existentes são marcadas; UV liga na Nubank (jul/ago em diante)
   - Aportes não entram no custo de vida, mas reduzem o saldo da conta de origem (ex. Nubank) e o carry-over
   - Contas de investimento não aparecem em Saldo por conta — só aportes e resgates
 

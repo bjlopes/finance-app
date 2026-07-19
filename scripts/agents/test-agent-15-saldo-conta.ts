@@ -11,6 +11,7 @@ import { assert, section, approx, exitCode } from "./_helpers";
 import { getMesEfetivo } from "../../src/lib/fluxoCaixa";
 import {
   calcularSaldosContaMes,
+  migrarContasCartoesPagamento,
   somarSaldoPorContaMes,
 } from "../../src/lib/transferencias";
 import type { Transacao } from "../../src/types";
@@ -172,5 +173,22 @@ section("Filtro de conta ativa");
 const soItau = saldosNoMes("2026-07", ["Itaú"]);
 assert(soItau.saldoFinal["Nubank"] === undefined, "Nubank fora do filtro");
 assert(approx(soItau.saldoFinal["Itaú"] ?? 0, 2300), "Itaú isolado no mês");
+
+section("Migração retroativa Ultraviolet → Nubank");
+const contasCrua: ContaItem[] = [
+  { id: "2", nome: "Nubank" },
+  { id: "5", nome: "Nubank Ultraviolet" },
+  { id: "6", nome: "Cartão Itaú" },
+];
+const migradas = migrarContasCartoesPagamento(contasCrua);
+const uv = migradas.contas.find((c) => c.nome === "Nubank Ultraviolet")!;
+const itauCc = migradas.contas.find((c) => c.nome === "Cartão Itaú")!;
+assert(migradas.alteradas === 2, "migra UV e Cartão Itaú");
+assert(Boolean(uv.isCartaoCredito), "UV vira cartão");
+assert(uv.contaPagamentoId === "2", "UV paga via Nubank");
+assert(uv.diaPagamento === 14, "UV dia 14");
+assert(uv.dataFechamento === 7, "UV fecha dia 7");
+assert(Boolean(itauCc.isCartaoCredito), "Cartão Itaú marcado como CC");
+assert(itauCc.contaPagamentoId == null, "Cartão Itaú sem débito automático");
 
 process.exit(exitCode());

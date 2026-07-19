@@ -96,6 +96,78 @@ function normalizarLabel(label: string): string {
     .replace(/\s+/g, " ");
 }
 
+function isNomeUltraviolet(nome: string): boolean {
+  const n = normalizarLabel(nome);
+  return n.includes("ultraviolet") || n.includes("ultravioleta");
+}
+
+function isNomeCartaoItau(nome: string): boolean {
+  const n = normalizarLabel(nome);
+  return (
+    n.includes("cartao itau") ||
+    n.includes("itau cartao") ||
+    n === "cartao itau" ||
+    (n.includes("itau") && n.includes("cartao"))
+  );
+}
+
+function isNomeNubankCaixa(nome: string): boolean {
+  const n = normalizarLabel(nome);
+  return n === "nubank" || n === "nu bank";
+}
+
+/**
+ * Migra contas já existentes para a lógica de cartão/pagamento.
+ * - Marca Ultraviolet e Cartão Itaú como cartão (sem carry-over).
+ * - Liga Ultraviolet → Nubank com pagamento no dia 14 (fechamento dia 7).
+ * Assim julho/agosto (e meses seguintes) passam a descontar a fatura sem setup manual.
+ */
+export function migrarContasCartoesPagamento(contas: ContaItem[]): {
+  contas: ContaItem[];
+  alteradas: number;
+} {
+  const nubankCaixa = contas.find(
+    (c) => isNomeNubankCaixa(c.nome) && !c.isCartaoCredito && !c.isInvestimento
+  );
+
+  let alteradas = 0;
+  const next = contas.map((conta) => {
+    let atualizada = { ...conta };
+    let mudou = false;
+
+    if (isNomeUltraviolet(conta.nome)) {
+      if (!atualizada.isCartaoCredito) {
+        atualizada.isCartaoCredito = true;
+        mudou = true;
+      }
+      if (atualizada.dataFechamento == null) {
+        atualizada.dataFechamento = 7;
+        mudou = true;
+      }
+      if (nubankCaixa) {
+        if (!atualizada.contaPagamentoId) {
+          atualizada.contaPagamentoId = nubankCaixa.id;
+          mudou = true;
+        }
+        if (atualizada.diaPagamento == null) {
+          atualizada.diaPagamento = 14;
+          mudou = true;
+        }
+      }
+    } else if (isNomeCartaoItau(conta.nome)) {
+      if (!atualizada.isCartaoCredito) {
+        atualizada.isCartaoCredito = true;
+        mudou = true;
+      }
+    }
+
+    if (mudou) alteradas += 1;
+    return atualizada;
+  });
+
+  return { contas: next, alteradas };
+}
+
 function isNomeTagInvestimento(nome: string): boolean {
   const normalized = normalizarLabel(nome);
   return normalized === "investimento" || normalized === "investimentos";
@@ -281,6 +353,8 @@ function listarPagamentosFaturaNoMes(
     if (!cartao.isCartaoCredito || !cartao.contaPagamentoId || cartao.diaPagamento == null) {
       continue;
     }
+    // Débito da fatura na conta de caixa a partir do marco de carry-over (jul/2026).
+    if (mesPagamentoYm < SALDO_CARRY_OVER_INICIO) continue;
     const contaPagamento = contas.find((c) => c.id === cartao.contaPagamentoId);
     if (!contaPagamento || isContaInvestimento(contaPagamento.nome, contas)) continue;
     if (contasAtivas && !contasAtivas.includes(contaPagamento.nome)) continue;
