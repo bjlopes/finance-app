@@ -24,6 +24,10 @@ export interface ContaItem {
   nome: string;
   isCartaoCredito?: boolean;
   dataFechamento?: number;
+  /** Conta de caixa que paga a fatura deste cartão (ex. Nubank paga Ultraviolet). */
+  contaPagamentoId?: string;
+  /** Dia do mês em que a fatura é debitada da conta de pagamento (ex. 14). */
+  diaPagamento?: number;
   /** Conta de investimento — transferências para/de ela viram aporte/resgate no dashboard */
   isInvestimento?: boolean;
 }

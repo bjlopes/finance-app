@@ -22,16 +22,24 @@ assert(pageSrc.includes("isInvestimento"), "checkbox investimento");
 assert(pageSrc.includes("Conta de investimento"), "label investimento");
 assert(pageSrc.includes("Invest."), "badge Invest.");
 assert(pageSrc.includes("dataFechamento"), "campo fechamento fatura");
+assert(pageSrc.includes("contaPagamentoId"), "campo conta de pagamento");
+assert(pageSrc.includes("diaPagamento"), "campo dia de pagamento");
 
 section("Store — persistência");
 installLocalStorageMock();
 clearLocalData();
 
 saveConta({
+  id: "nubank",
+  nome: "Nubank",
+});
+saveConta({
   id: "cc1",
   nome: "Cartão XP",
   isCartaoCredito: true,
   dataFechamento: 10,
+  contaPagamentoId: "nubank",
+  diaPagamento: 14,
 });
 saveConta({
   id: "inv1",
@@ -44,6 +52,8 @@ const cc = contas.find((c) => c.nome === "Cartão XP");
 const inv = contas.find((c) => c.nome === "CDBs");
 assert(Boolean(cc?.isCartaoCredito), "persiste isCartaoCredito");
 assert(cc?.dataFechamento === 10, "persiste dataFechamento");
+assert(cc?.contaPagamentoId === "nubank", "persiste contaPagamentoId");
+assert(cc?.diaPagamento === 14, "persiste diaPagamento");
 assert(Boolean(inv?.isInvestimento), "persiste isInvestimento");
 
 removeBrowserGlobals();

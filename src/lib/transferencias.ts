@@ -1,9 +1,15 @@
 import type { Transacao, Tag } from "@/types";
 import type { ContaItem } from "@/context/DataContext";
-import { getMesEfetivo } from "@/lib/fluxoCaixa";
+import { getMesEfetivo, getMesFaturaPagaEm } from "@/lib/fluxoCaixa";
 
 /** Primeiro mês cujo saldo final alimenta o mês seguinte. */
 export const SALDO_CARRY_OVER_INICIO = "2026-07";
+
+function addMesYm(mesYm: string, delta: number): string {
+  const [ano, mes] = mesYm.split("-").map(Number);
+  const d = new Date(ano, mes - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
 
 export function isTransferencia(t: Transacao): boolean {
   return Boolean(t.transferenciaId);
@@ -69,6 +75,16 @@ export interface TransferenciaInput {
 export function isContaInvestimento(nome: string, contas: ContaItem[]): boolean {
   const conta = contas.find((c) => c.nome === nome);
   return Boolean(conta?.isInvestimento);
+}
+
+export function isContaCartaoCredito(nome: string, contas: ContaItem[]): boolean {
+  const conta = contas.find((c) => c.nome === nome);
+  return Boolean(conta?.isCartaoCredito);
+}
+
+/** Contas que acumulam saldo mês a mês (corrente, Flash etc.). Cartões e investimentos ficam de fora. */
+export function isContaComCarryOver(nome: string, contas: ContaItem[]): boolean {
+  return !isContaInvestimento(nome, contas) && !isContaCartaoCredito(nome, contas);
 }
 
 function normalizarLabel(label: string): string {
@@ -223,18 +239,84 @@ export function filtrarSaldosCaixa(
   );
 }
 
+export interface PagamentoFaturaMes {
+  cartaoNome: string;
+  contaPagamentoNome: string;
+  valor: number;
+  diaPagamento: number;
+  mesFatura: string;
+}
+
 export interface SaldosContaMes {
   saldoInicial: Record<string, number>;
   movimentoMes: Record<string, number>;
   saldoFinal: Record<string, number>;
+  /** Pagamentos de fatura debitados das contas de caixa no mês selecionado. */
+  pagamentosFatura: PagamentoFaturaMes[];
+}
+
+function valorFaturaCartao(
+  transacoes: Transacao[],
+  cartaoNome: string,
+  mesFatura: string,
+  contas: ContaItem[]
+): number {
+  let saldo = 0;
+  for (const t of transacoes) {
+    if (t.conta !== cartaoNome) continue;
+    if (getMesEfetivo(t, contas) !== mesFatura) continue;
+    saldo += t.valor;
+  }
+  return Math.max(0, -saldo);
+}
+
+function listarPagamentosFaturaNoMes(
+  transacoes: Transacao[],
+  contas: ContaItem[],
+  mesPagamentoYm: string,
+  contasAtivas?: string[]
+): PagamentoFaturaMes[] {
+  const pagamentos: PagamentoFaturaMes[] = [];
+  for (const cartao of contas) {
+    if (!cartao.isCartaoCredito || !cartao.contaPagamentoId || cartao.diaPagamento == null) {
+      continue;
+    }
+    const contaPagamento = contas.find((c) => c.id === cartao.contaPagamentoId);
+    if (!contaPagamento || isContaInvestimento(contaPagamento.nome, contas)) continue;
+    if (contasAtivas && !contasAtivas.includes(contaPagamento.nome)) continue;
+
+    const mesFatura = getMesFaturaPagaEm(mesPagamentoYm, cartao);
+    if (!mesFatura) continue;
+
+    const valor = valorFaturaCartao(transacoes, cartao.nome, mesFatura, contas);
+    if (valor <= 0) continue;
+
+    pagamentos.push({
+      cartaoNome: cartao.nome,
+      contaPagamentoNome: contaPagamento.nome,
+      valor,
+      diaPagamento: cartao.diaPagamento,
+      mesFatura,
+    });
+  }
+  return pagamentos;
+}
+
+function aplicarPagamentosNoMapa(
+  mapa: Record<string, number>,
+  pagamentos: PagamentoFaturaMes[]
+): void {
+  for (const p of pagamentos) {
+    mapa[p.contaPagamentoNome] = (mapa[p.contaPagamentoNome] || 0) - p.valor;
+  }
 }
 
 /**
- * Saldo das contas de caixa no mês selecionado.
- * Contas de investimento ficam de fora (só aparecem em aportes/resgates).
- * Até o mês de início, usa apenas as transações do próprio mês.
- * Depois dele, carrega somente movimentos a partir de SALDO_CARRY_OVER_INICIO,
- * evitando recalcular retroativamente saldos que já foram lançados manualmente.
+ * Saldo das contas no mês selecionado.
+ * - Contas de investimento ficam de fora (só aportes/resgates).
+ * - Cartões de crédito NÃO fazem carry-over: o saldo do mês é só a fatura daquele ciclo.
+ * - Contas de caixa (corrente, Flash etc.) carregam saldo a partir de SALDO_CARRY_OVER_INICIO.
+ * - Cartões com conta de pagamento debitam a fatura dessa conta no dia configurado.
  */
 export function calcularSaldosContaMes(
   transacoes: Transacao[],
@@ -246,11 +328,22 @@ export function calcularSaldosContaMes(
   const saldoInicial: Record<string, number> = {};
   if (mesYm > SALDO_CARRY_OVER_INICIO) {
     for (const t of transacoes) {
-      if (isContaInvestimento(t.conta, contas)) continue;
+      if (!isContaComCarryOver(t.conta, contas)) continue;
       if (contasAtivas && !contasAtivas.includes(t.conta)) continue;
       const mesEfetivo = getMesEfetivo(t, contas);
       if (mesEfetivo < SALDO_CARRY_OVER_INICIO || mesEfetivo >= mesYm) continue;
       saldoInicial[t.conta] = (saldoInicial[t.conta] || 0) + t.valor;
+    }
+
+    for (
+      let mes = SALDO_CARRY_OVER_INICIO;
+      mes < mesYm;
+      mes = addMesYm(mes, 1)
+    ) {
+      aplicarPagamentosNoMapa(
+        saldoInicial,
+        listarPagamentosFaturaNoMes(transacoes, contas, mes, contasAtivas)
+      );
     }
   }
 
@@ -258,18 +351,26 @@ export function calcularSaldosContaMes(
     calcularSaldoPorContaMes(transacoesMes),
     contas
   );
+  const pagamentosFatura = listarPagamentosFaturaNoMes(
+    transacoes,
+    contas,
+    mesYm,
+    contasAtivas
+  );
+  aplicarPagamentosNoMapa(movimentoMes, pagamentosFatura);
+
   const nomes = new Set([...Object.keys(saldoInicial), ...Object.keys(movimentoMes)]);
   const saldoFinal: Record<string, number> = {};
   for (const nome of Array.from(nomes)) {
     saldoFinal[nome] = (saldoInicial[nome] || 0) + (movimentoMes[nome] || 0);
   }
-  return { saldoInicial, movimentoMes, saldoFinal };
+  return { saldoInicial, movimentoMes, saldoFinal, pagamentosFatura };
 }
 
 /**
  * Soma o movimento das contas no mês.
  * - patrimônio: todas as contas (transferências se cancelam entre si)
- * - caixa: só contas não-investimento (= fluxo disponível; investimento fica de fora)
+ * - caixa: só contas não-investimento e não-cartão (= dinheiro disponível)
  */
 export function somarSaldoPorContaMes(
   saldoPorConta: Record<string, number>,
@@ -277,7 +378,7 @@ export function somarSaldoPorContaMes(
   modo: "patrimonio" | "caixa" = "patrimonio"
 ): number {
   return Object.entries(saldoPorConta).reduce((sum, [nome, valor]) => {
-    if (modo === "caixa" && isContaInvestimento(nome, contas)) return sum;
+    if (modo === "caixa" && !isContaComCarryOver(nome, contas)) return sum;
     return sum + valor;
   }, 0);
 }

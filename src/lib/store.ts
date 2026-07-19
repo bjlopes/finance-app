@@ -41,6 +41,8 @@ interface ContaItem {
   nome: string;
   isCartaoCredito?: boolean;
   dataFechamento?: number;
+  contaPagamentoId?: string;
+  diaPagamento?: number;
   isInvestimento?: boolean;
 }
 

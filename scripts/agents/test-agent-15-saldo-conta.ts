@@ -2,12 +2,17 @@
  * Agent 15 — carry-over de caixa a partir de julho/2026
  *
  * Contas de investimento NÃO entram no saldo acumulado — só aportes/resgates.
+ * Cartões de crédito NÃO fazem carry-over (cada mês = fatura do ciclo).
  * Aportes reduzem o saldo da origem e entram no carry-over do mês seguinte.
+ * Fatura com conta de pagamento debita a conta de caixa no dia configurado.
  * Movimentos anteriores a julho/2026 não são recalculados.
  */
 import { assert, section, approx, exitCode } from "./_helpers";
 import { getMesEfetivo } from "../../src/lib/fluxoCaixa";
-import { calcularSaldosContaMes } from "../../src/lib/transferencias";
+import {
+  calcularSaldosContaMes,
+  somarSaldoPorContaMes,
+} from "../../src/lib/transferencias";
 import type { Transacao } from "../../src/types";
 import type { ContaItem } from "../../src/context/DataContext";
 
@@ -15,6 +20,21 @@ const contas: ContaItem[] = [
   { id: "1", nome: "Itaú" },
   { id: "2", nome: "Nubank" },
   { id: "3", nome: "Investimentos", isInvestimento: true },
+  { id: "4", nome: "Flash alimentação" },
+  {
+    id: "5",
+    nome: "Nubank Ultraviolet",
+    isCartaoCredito: true,
+    dataFechamento: 7,
+    contaPagamentoId: "2",
+    diaPagamento: 14,
+  },
+  {
+    id: "6",
+    nome: "Cartão Itaú",
+    isCartaoCredito: true,
+    dataFechamento: 10,
+  },
 ];
 
 const transacoes: Transacao[] = [
@@ -59,6 +79,38 @@ const transacoes: Transacao[] = [
     tagIds: [],
     transferenciaId: "t2",
   },
+  {
+    id: "7",
+    descricao: "VR",
+    valor: 400,
+    conta: "Flash alimentação",
+    data: "2026-07-01",
+    tagIds: [],
+  },
+  {
+    id: "8",
+    descricao: "Almoço",
+    valor: -50,
+    conta: "Flash alimentação",
+    data: "2026-07-15",
+    tagIds: [],
+  },
+  {
+    id: "9",
+    descricao: "Compra UV",
+    valor: -800,
+    conta: "Nubank Ultraviolet",
+    data: "2026-07-03",
+    tagIds: [],
+  },
+  {
+    id: "10",
+    descricao: "Compra Itaú CC",
+    valor: -450,
+    conta: "Cartão Itaú",
+    data: "2026-07-08",
+    tagIds: [],
+  },
 ];
 
 function saldosNoMes(mes: string, contasAtivas: string[]) {
@@ -68,14 +120,23 @@ function saldosNoMes(mes: string, contasAtivas: string[]) {
   return calcularSaldosContaMes(transacoes, transacoesMes, contas, mes, contasAtivas);
 }
 
+const todas = contas.map((c) => c.nome);
+
 section("Julho é o marco e não recalcula meses anteriores");
-const julho = saldosNoMes("2026-07", ["Itaú", "Nubank", "Investimentos"]);
+const julho = saldosNoMes("2026-07", todas);
 assert(approx(julho.saldoInicial["Itaú"] ?? 0, 0), "saldo antigo de junho não entra");
 assert(approx(julho.movimentoMes["Itaú"] ?? 0, 2300), "Itaú: 3000 - 200 - 500");
 assert(approx(julho.saldoFinal["Itaú"] ?? 0, 2300), "Itaú final = movimento de julho");
-assert(approx(julho.saldoFinal["Nubank"] ?? 0, 200), "Nubank: +500 - 300 (aporte)");
+assert(approx(julho.saldoFinal["Nubank"] ?? 0, -600), "Nubank: +500 - 300 - 800 fatura UV");
 assert(julho.saldoFinal["Investimentos"] === undefined, "investimento sem saldo acumulado");
 assert(julho.movimentoMes["Investimentos"] === undefined, "aporte destino não entra no saldo de caixa");
+assert(approx(julho.saldoFinal["Flash alimentação"] ?? 0, 350), "Flash acumula no mês");
+assert(approx(julho.saldoFinal["Nubank Ultraviolet"] ?? 0, -800), "cartão mostra fatura do mês");
+assert(approx(julho.saldoFinal["Cartão Itaú"] ?? 0, -450), "Cartão Itaú sem débito em conta");
+assert(
+  julho.pagamentosFatura.some((p) => p.cartaoNome === "Nubank Ultraviolet" && p.valor === 800),
+  "pagamento UV listado"
+);
 
 section("Saldo manual deve ser lançado no próprio mês");
 const julhoComSaldoManual: Transacao[] = [
@@ -93,16 +154,19 @@ const saldoManual = calcularSaldosContaMes(
 );
 assert(approx(saldoManual.saldoFinal["Itaú"] ?? 0, 3300), "saldo manual + movimento do mês");
 
-section("Saldo final de julho vira inicial de agosto");
-const agosto = saldosNoMes("2026-08", ["Itaú", "Nubank", "Investimentos"]);
+section("Saldo final de julho vira inicial de agosto (só caixa)");
+const agosto = saldosNoMes("2026-08", todas);
 assert(approx(agosto.saldoInicial["Itaú"] ?? 0, 2300), "Itaú herda julho");
-assert(approx(agosto.saldoInicial["Nubank"] ?? 0, 200), "Nubank herda julho já descontando aporte");
+assert(approx(agosto.saldoInicial["Nubank"] ?? 0, -600), "Nubank herda julho já descontando aporte e UV");
+assert(approx(agosto.saldoInicial["Flash alimentação"] ?? 0, 350), "Flash herda julho");
 assert(agosto.saldoInicial["Investimentos"] === undefined, "investimento não carrega saldo");
-assert(approx(agosto.saldoFinal["Nubank"] ?? 0, 200), "agosto sem movimento mantém Nubank");
+assert(approx(agosto.saldoInicial["Nubank Ultraviolet"] ?? 0, 0), "cartão UV sem carry-over");
+assert(approx(agosto.saldoInicial["Cartão Itaú"] ?? 0, 0), "Cartão Itaú sem carry-over");
+assert(approx(agosto.saldoFinal["Nubank"] ?? 0, -600), "agosto sem movimento mantém Nubank");
 
-section("Total caixa de julho (sem investimento)");
-const totalCaixa = Object.values(julho.saldoFinal).reduce((a, b) => a + b, 0);
-assert(approx(totalCaixa, 2500), "caixa = 3000 - 200 - 300 aporte");
+section("Total caixa de julho (sem investimento nem cartões)");
+const totalCaixa = somarSaldoPorContaMes(julho.saldoFinal, contas, "caixa");
+assert(approx(totalCaixa, 2050), "caixa = Itaú 2300 + Nubank -600 + Flash 350");
 
 section("Filtro de conta ativa");
 const soItau = saldosNoMes("2026-07", ["Itaú"]);

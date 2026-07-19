@@ -13,6 +13,8 @@ export interface DbContaItem {
   nome: string;
   isCartaoCredito?: boolean;
   dataFechamento?: number;
+  contaPagamentoId?: string;
+  diaPagamento?: number;
   isInvestimento?: boolean;
 }
 

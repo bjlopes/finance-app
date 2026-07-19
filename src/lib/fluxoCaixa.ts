@@ -3,6 +3,33 @@ import type { ContaItem } from "@/context/DataContext";
 
 const DIAS_APOS_FECHAMENTO = 7;
 
+function addMesYm(mesYm: string, delta: number): string {
+  const [ano, mes] = mesYm.split("-").map(Number);
+  const d = new Date(ano, mes - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Mês da fatura que é paga em `mesPagamentoYm`.
+ * Se o dia de pagamento é no mesmo mês do fechamento ou depois, a fatura
+ * é a do próprio mês; se o pagamento vem antes do fechamento, é a do mês anterior.
+ */
+export function getMesFaturaPagaEm(
+  mesPagamentoYm: string,
+  cartao: ContaItem
+): string | null {
+  if (
+    !cartao.isCartaoCredito ||
+    !cartao.contaPagamentoId ||
+    cartao.diaPagamento == null
+  ) {
+    return null;
+  }
+  const fechamento = cartao.dataFechamento ?? 1;
+  if (cartao.diaPagamento >= fechamento) return mesPagamentoYm;
+  return addMesYm(mesPagamentoYm, -1);
+}
+
 /**
  * Retorna a data de vencimento da fatura que contém esta transação.
  * Para cartão de crédito: fatura fecha no dataFechamento, vence 7 dias depois.

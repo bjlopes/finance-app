@@ -139,7 +139,7 @@ export default function DashboardPage() {
       mesSelecionado,
       contasAtivas
     );
-    const { saldoInicial: saldoInicialPorConta, movimentoMes: movimentoPorConta, saldoFinal: saldoFinalPorConta } =
+    const { saldoInicial: saldoInicialPorConta, movimentoMes: movimentoPorConta, saldoFinal: saldoFinalPorConta, pagamentosFatura } =
       saldosConta;
     // Só contas de caixa: carry-over começa em jul/2026; aportes reduzem o saldo da origem.
     const somaCaixaMes = somarSaldoPorContaMes(saldoFinalPorConta, contas, "caixa");
@@ -164,6 +164,7 @@ export default function DashboardPage() {
       saldoInicialPorConta,
       movimentoPorConta,
       saldoFinalPorConta,
+      pagamentosFatura,
       tagHierarchy,
       gastos,
       receitas,
@@ -190,16 +191,22 @@ export default function DashboardPage() {
       .sort(compareTransacoesDesc);
   }, [contaSaldoModal, transacoes, contas, mesSelecionado, contasAtivas]);
 
-  const movimentoContaModal = useMemo(
-    () => transacoesContaSaldoDetalhe.reduce((s, t) => s + t.valor, 0),
-    [transacoesContaSaldoDetalhe]
-  );
+  const movimentoContaModal = contaSaldoModal
+    ? stats.movimentoPorConta[contaSaldoModal] ?? 0
+    : 0;
 
   const saldoInicialContaModal = contaSaldoModal
     ? stats.saldoInicialPorConta[contaSaldoModal] ?? 0
     : 0;
 
-  const saldoFinalContaModal = saldoInicialContaModal + movimentoContaModal;
+  const saldoFinalContaModal = contaSaldoModal
+    ? stats.saldoFinalPorConta[contaSaldoModal] ??
+      saldoInicialContaModal + movimentoContaModal
+    : 0;
+
+  const pagamentosContaModal = contaSaldoModal
+    ? stats.pagamentosFatura.filter((p) => p.contaPagamentoNome === contaSaldoModal)
+    : [];
 
   const formatBRL = (n: number) =>
     new Intl.NumberFormat("pt-BR", {
@@ -486,7 +493,8 @@ export default function DashboardPage() {
               <div className="pt-2 border-t border-slate-700/50">
                 <h3 className="text-slate-300 font-medium">Saldo por conta</h3>
                 <p className="text-xs text-slate-500 mb-3 mt-0.5">
-                  Carry-over automático a partir de julho/2026 (aportes saem da conta de origem)
+                  Carry-over em contas de caixa a partir de jul/2026. Cartões não
+                  acumulam; faturas com conta de pagamento saem do saldo dela.
                 </p>
                 <ul className="space-y-1">
                   {stats.topContas.map(([conta, saldo]) => (
@@ -604,7 +612,8 @@ export default function DashboardPage() {
                   <span className="tabular-nums">{formatBRL(saldoInicialContaModal)}</span>
                 </div>
               )}
-              {transacoesContaSaldoDetalhe.length === 0 ? (
+              {transacoesContaSaldoDetalhe.length === 0 &&
+              pagamentosContaModal.length === 0 ? (
                 <p className="text-slate-500 text-sm">
                   {saldoInicialContaModal !== 0
                     ? "Nenhuma movimentação nesta conta neste mês."
@@ -629,6 +638,24 @@ export default function DashboardPage() {
                         }`}
                       >
                         {formatBRL(t.valor)}
+                      </span>
+                    </li>
+                  ))}
+                  {pagamentosContaModal.map((p) => (
+                    <li
+                      key={`${p.cartaoNome}-${p.mesFatura}`}
+                      className="flex justify-between items-start gap-2 py-2 border-b border-slate-700/30 last:border-0"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-slate-200 truncate">
+                          Pagamento fatura {p.cartaoNome}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Dia {p.diaPagamento} · fatura {p.mesFatura}
+                        </p>
+                      </div>
+                      <span className="font-medium shrink-0 text-red-400">
+                        {formatBRL(-p.valor)}
                       </span>
                     </li>
                   ))}
