@@ -10,6 +10,7 @@ import {
   Sparkles,
   TrendingDown,
   TrendingUp,
+  Wallet,
 } from "lucide-react";
 import { useData } from "@/context/DataContext";
 import { calcularInsightsFinanceiros } from "@/lib/insights";
@@ -112,7 +113,7 @@ export default function InsightsPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 tablet:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 tablet:grid-cols-2 lg:grid-cols-4">
             <div className="glass rounded-xl p-5">
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <Brain size={17} />
@@ -127,6 +128,19 @@ export default function InsightsPage() {
               <p className="mt-2 text-xs text-slate-500">
                 Confiança {insights.confianca} · {insights.mesesBase.length}{" "}
                 {insights.mesesBase.length === 1 ? "mês analisado" : "meses analisados"}
+              </p>
+            </div>
+
+            <div className="glass rounded-xl p-5">
+              <div className="flex items-center gap-2 text-sm text-slate-400">
+                <Wallet size={17} />
+                Receita típica
+              </div>
+              <p className="mt-2 text-2xl font-bold text-sky-400">
+                {formatBRL(insights.receitaTipica)}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Mediana sem entradas pontuais (salário permanece)
               </p>
             </div>
 
@@ -171,9 +185,9 @@ export default function InsightsPage() {
                 {formatBRL(insights.sobraTipica)}
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                Receita típica {formatBRL(insights.receitaTipica)}
+                Receita típica − custo de vida típico
                 {insights.taxaPoupancaTipica != null &&
-                  ` · ${Math.round(insights.taxaPoupancaTipica)}% de folga`}
+                  ` · ${Math.round(insights.taxaPoupancaTipica)}% da renda`}
               </p>
             </div>
           </div>

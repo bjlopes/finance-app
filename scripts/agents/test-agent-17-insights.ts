@@ -61,6 +61,14 @@ transacoes.push(
     tagIds: [],
   },
   {
+    id: "adiantamento",
+    descricao: "Adiantamento de salário",
+    valor: 9000,
+    conta: "Nubank",
+    data: "2026-04-01",
+    tagIds: [],
+  },
+  {
     id: "loan",
     descricao: "Quitação empréstimo",
     valor: -10000,
@@ -131,6 +139,10 @@ assert(insights.pontuaisExcluidos.some((p) => p.id === "loan"), "empréstimo exc
 assert(
   insights.pontuaisExcluidos.some((p) => p.id === "bonus" && p.tipo === "entrada"),
   "bônus excluído da receita típica"
+);
+assert(
+  !insights.pontuaisExcluidos.some((p) => p.id === "adiantamento"),
+  "adiantamento de salário não é outlier"
 );
 assert(!insights.pontuaisExcluidos.some((p) => p.id === "aporte"), "aporte nem entra na base");
 assert(!insights.pontuaisExcluidos.some((p) => p.id === "interna"), "interna nem entra na base");

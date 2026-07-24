@@ -138,6 +138,29 @@ function isReceitaVida(t: Transacao, contas: ContaItem[], tags: Tag[]): boolean 
   );
 }
 
+/** Salário e derivados (adiantamento, 13º etc.) não devem ser tratados como outlier. */
+function isRelacionadoASalario(t: Transacao, tags: Tag[]): boolean {
+  const descricao = normalizar(t.descricao);
+  const termos = [
+    "salario",
+    "adiantamento",
+    "13 salario",
+    "13o",
+    "decimo terceiro",
+    "holerite",
+    "folha de pagamento",
+    "pro labore",
+    "prolabore",
+  ];
+  if (termos.some((termo) => descricao.includes(termo))) return true;
+  return temTagNome(t, tags, [
+    "salario",
+    "salário",
+    "adiantamento",
+    "folha",
+  ]);
+}
+
 export function calcularInsightsFinanceiros(
   transacoes: Transacao[],
   tags: Tag[],
@@ -213,6 +236,9 @@ export function calcularInsightsFinanceiros(
     medianaValor: number,
     tipo: InsightPontual["tipo"]
   ): { pontual: boolean; motivo: string } => {
+    if (isRelacionadoASalario(t, tags)) {
+      return { pontual: false, motivo: "" };
+    }
     if (temTagNome(t, tags, ["pontual"])) {
       return { pontual: true, motivo: "Marcado como pontual" };
     }
