@@ -113,7 +113,8 @@ function isNomeCartaoItau(nome: string): boolean {
 
 function isNomeNubankCaixa(nome: string): boolean {
   const n = normalizarLabel(nome);
-  return n === "nubank" || n === "nu bank";
+  if (isNomeUltraviolet(n)) return false;
+  return n === "nubank" || n === "nu bank" || n.includes("nubank");
 }
 
 /**
