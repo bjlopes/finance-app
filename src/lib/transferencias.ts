@@ -1,6 +1,6 @@
 import type { Transacao, Tag } from "@/types";
 import type { ContaItem } from "@/context/DataContext";
-import { getMesEfetivo, getMesFaturaPagaEm } from "@/lib/fluxoCaixa";
+import { getMesEfetivo, getMesFaturaPagaEm, getDataPagamentoFaturaMes, diaPagamentoFromFechamento, pagamentoFaturaJaOcorreu } from "@/lib/fluxoCaixa";
 
 /** Primeiro mês cujo saldo final alimenta o mês seguinte. */
 export const SALDO_CARRY_OVER_INICIO = "2026-07";
@@ -150,8 +150,11 @@ export function migrarContasCartoesPagamento(contas: ContaItem[]): {
           atualizada.contaPagamentoId = nubankCaixa.id;
           mudou = true;
         }
-        if (atualizada.diaPagamento == null) {
-          atualizada.diaPagamento = 14;
+        const diaDerivado = diaPagamentoFromFechamento(
+          atualizada.dataFechamento ?? 7
+        );
+        if (atualizada.diaPagamento !== diaDerivado) {
+          atualizada.diaPagamento = diaDerivado;
           mudou = true;
         }
       }
@@ -317,6 +320,7 @@ export interface PagamentoFaturaMes {
   contaPagamentoNome: string;
   valor: number;
   diaPagamento: number;
+  dataPagamento: string;
   mesFatura: string;
 }
 
@@ -347,11 +351,12 @@ function listarPagamentosFaturaNoMes(
   transacoes: Transacao[],
   contas: ContaItem[],
   mesPagamentoYm: string,
-  contasAtivas?: string[]
+  contasAtivas?: string[],
+  hoje: Date = new Date()
 ): PagamentoFaturaMes[] {
   const pagamentos: PagamentoFaturaMes[] = [];
   for (const cartao of contas) {
-    if (!cartao.isCartaoCredito || !cartao.contaPagamentoId || cartao.diaPagamento == null) {
+    if (!cartao.isCartaoCredito || !cartao.contaPagamentoId || cartao.dataFechamento == null) {
       continue;
     }
     // Débito da fatura na conta de caixa a partir do marco de carry-over (jul/2026).
@@ -363,14 +368,21 @@ function listarPagamentosFaturaNoMes(
     const mesFatura = getMesFaturaPagaEm(mesPagamentoYm, cartao);
     if (!mesFatura) continue;
 
+    const dataPagamento = getDataPagamentoFaturaMes(mesFatura, cartao);
+    if (!dataPagamento) continue;
+    // Só debita depois do vencimento (fechamento + 7 dias).
+    if (!pagamentoFaturaJaOcorreu(mesFatura, cartao, hoje)) continue;
+
     const valor = valorFaturaCartao(transacoes, cartao.nome, mesFatura, contas);
     if (valor <= 0) continue;
 
+    const [, , diaStr] = dataPagamento.split("-");
     pagamentos.push({
       cartaoNome: cartao.nome,
       contaPagamentoNome: contaPagamento.nome,
       valor,
-      diaPagamento: cartao.diaPagamento,
+      diaPagamento: Number(diaStr),
+      dataPagamento,
       mesFatura,
     });
   }
@@ -391,14 +403,16 @@ function aplicarPagamentosNoMapa(
  * - Contas de investimento ficam de fora (só aportes/resgates).
  * - Cartões de crédito NÃO fazem carry-over: o saldo do mês é só a fatura daquele ciclo.
  * - Contas de caixa (corrente, Flash etc.) carregam saldo a partir de SALDO_CARRY_OVER_INICIO.
- * - Cartões com conta de pagamento debitam a fatura dessa conta no dia configurado.
+ * - Cartões com conta de pagamento debitam a fatura no vencimento (fechamento + 7 dias),
+ *   e só depois que essa data chega.
  */
 export function calcularSaldosContaMes(
   transacoes: Transacao[],
   transacoesMes: Transacao[],
   contas: ContaItem[],
   mesYm: string,
-  contasAtivas?: string[]
+  contasAtivas?: string[],
+  hoje: Date = new Date()
 ): SaldosContaMes {
   const saldoInicial: Record<string, number> = {};
   if (mesYm > SALDO_CARRY_OVER_INICIO) {
@@ -417,7 +431,7 @@ export function calcularSaldosContaMes(
     ) {
       aplicarPagamentosNoMapa(
         saldoInicial,
-        listarPagamentosFaturaNoMes(transacoes, contas, mes, contasAtivas)
+        listarPagamentosFaturaNoMes(transacoes, contas, mes, contasAtivas, hoje)
       );
     }
   }
@@ -430,7 +444,8 @@ export function calcularSaldosContaMes(
     transacoes,
     contas,
     mesYm,
-    contasAtivas
+    contasAtivas,
+    hoje
   );
   aplicarPagamentosNoMapa(movimentoMes, pagamentosFatura);
 

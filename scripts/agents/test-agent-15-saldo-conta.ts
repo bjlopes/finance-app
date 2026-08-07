@@ -4,7 +4,8 @@
  * Contas de investimento NÃO entram no saldo acumulado — só aportes/resgates.
  * Cartões de crédito NÃO fazem carry-over (cada mês = fatura do ciclo).
  * Aportes reduzem o saldo da origem e entram no carry-over do mês seguinte.
- * Fatura com conta de pagamento debita a conta de caixa no dia configurado.
+ * Fatura com conta de pagamento debita no vencimento (fechamento + 7 dias),
+ * só depois que essa data chega.
  * Movimentos anteriores a julho/2026 não são recalculados.
  */
 import { assert, section, approx, exitCode } from "./_helpers";
@@ -112,13 +113,32 @@ const transacoes: Transacao[] = [
     data: "2026-07-08",
     tagIds: [],
   },
+  {
+    id: "11",
+    descricao: "Compra UV agosto",
+    valor: -500,
+    conta: "Nubank Ultraviolet",
+    data: "2026-08-03",
+    tagIds: [],
+  },
 ];
 
-function saldosNoMes(mes: string, contasAtivas: string[]) {
+/** Depois do vencimento de julho (14), antes do de agosto (14). */
+const HOJE_ANTES_VENC_AGO = new Date(2026, 7, 7); // 7 ago 2026
+const HOJE_NO_VENC_AGO = new Date(2026, 7, 14); // 14 ago 2026
+
+function saldosNoMes(mes: string, contasAtivas: string[], hoje = HOJE_ANTES_VENC_AGO) {
   const transacoesMes = transacoes.filter(
     (t) => getMesEfetivo(t, contas) === mes && contasAtivas.includes(t.conta)
   );
-  return calcularSaldosContaMes(transacoes, transacoesMes, contas, mes, contasAtivas);
+  return calcularSaldosContaMes(
+    transacoes,
+    transacoesMes,
+    contas,
+    mes,
+    contasAtivas,
+    hoje
+  );
 }
 
 const todas = contas.map((c) => c.nome);
@@ -151,19 +171,33 @@ const saldoManual = calcularSaldosContaMes(
   julhoComSaldoManual,
   transacoesJulhoComSaldo,
   contas,
-  "2026-07"
+  "2026-07",
+  undefined,
+  HOJE_ANTES_VENC_AGO
 );
 assert(approx(saldoManual.saldoFinal["Itaú"] ?? 0, 3300), "saldo manual + movimento do mês");
 
 section("Saldo final de julho vira inicial de agosto (só caixa)");
-const agosto = saldosNoMes("2026-08", todas);
+const agosto = saldosNoMes("2026-08", todas, HOJE_ANTES_VENC_AGO);
 assert(approx(agosto.saldoInicial["Itaú"] ?? 0, 2300), "Itaú herda julho");
 assert(approx(agosto.saldoInicial["Nubank"] ?? 0, -600), "Nubank herda julho já descontando aporte e UV");
 assert(approx(agosto.saldoInicial["Flash alimentação"] ?? 0, 350), "Flash herda julho");
 assert(agosto.saldoInicial["Investimentos"] === undefined, "investimento não carrega saldo");
 assert(approx(agosto.saldoInicial["Nubank Ultraviolet"] ?? 0, 0), "cartão UV sem carry-over");
 assert(approx(agosto.saldoInicial["Cartão Itaú"] ?? 0, 0), "Cartão Itaú sem carry-over");
-assert(approx(agosto.saldoFinal["Nubank"] ?? 0, -600), "agosto sem movimento mantém Nubank");
+assert(approx(agosto.saldoFinal["Nubank"] ?? 0, -600), "antes do dia 14 agosto não debita fatura nova");
+assert(
+  !agosto.pagamentosFatura.some((p) => p.mesFatura === "2026-08"),
+  "fatura de agosto ainda não paga em 7/ago"
+);
+
+section("No vencimento de agosto a fatura entra na Conta Nubank");
+const agostoAposVenc = saldosNoMes("2026-08", todas, HOJE_NO_VENC_AGO);
+assert(approx(agostoAposVenc.saldoFinal["Nubank"] ?? 0, -1100), "Nubank: -600 inicial - 500 fatura ago");
+assert(
+  agostoAposVenc.pagamentosFatura.some((p) => p.mesFatura === "2026-08" && p.valor === 500),
+  "pagamento UV de agosto listado no dia 14"
+);
 
 section("Total caixa de julho (sem investimento nem cartões)");
 const totalCaixa = somarSaldoPorContaMes(julho.saldoFinal, contas, "caixa");
@@ -186,7 +220,7 @@ const itauCc = migradas.contas.find((c) => c.nome === "Cartão Itaú")!;
 assert(migradas.alteradas === 2, "migra UV e Cartão Itaú");
 assert(Boolean(uv.isCartaoCredito), "UV vira cartão");
 assert(uv.contaPagamentoId === "2", "UV paga via Conta Nubank");
-assert(uv.diaPagamento === 14, "UV dia 14");
+assert(uv.diaPagamento === 14, "UV dia 14 = fechamento 7 + 7");
 assert(uv.dataFechamento === 7, "UV fecha dia 7");
 assert(Boolean(itauCc.isCartaoCredito), "Cartão Itaú marcado como CC");
 assert(itauCc.contaPagamentoId == null, "Cartão Itaú sem débito automático");

@@ -1,7 +1,8 @@
 import type { Transacao } from "@/types";
 import type { ContaItem } from "@/context/DataContext";
 
-const DIAS_APOS_FECHAMENTO = 7;
+/** Dias entre o fechamento da fatura e o vencimento/pagamento. */
+export const DIAS_APOS_FECHAMENTO = 7;
 
 function addMesYm(mesYm: string, delta: number): string {
   const [ano, mes] = mesYm.split("-").map(Number);
@@ -9,25 +10,73 @@ function addMesYm(mesYm: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function formatDataLocal(d: Date): string {
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+function hojeYmD(hoje: Date = new Date()): string {
+  return formatDataLocal(
+    new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())
+  );
+}
+
 /**
- * Mês da fatura que é paga em `mesPagamentoYm`.
- * Se o dia de pagamento é no mesmo mês do fechamento ou depois, a fatura
- * é a do próprio mês; se o pagamento vem antes do fechamento, é a do mês anterior.
+ * Dia do calendário do pagamento a partir do fechamento (fechamento + 7 dias).
+ * Usa um mês de 31 dias só para obter o número do dia (ex. 25 → 1 do mês seguinte).
+ */
+export function diaPagamentoFromFechamento(dataFechamento: number): number {
+  const d = new Date(2026, 0, dataFechamento);
+  d.setDate(d.getDate() + DIAS_APOS_FECHAMENTO);
+  return d.getDate();
+}
+
+/**
+ * Data de pagamento (vencimento) da fatura do mês efetivo: fechamento + 7 dias.
+ * Retorna YYYY-MM-DD ou null se o cartão não tiver fechamento.
+ */
+export function getDataPagamentoFaturaMes(
+  mesFaturaYm: string,
+  cartao: ContaItem
+): string | null {
+  if (!cartao.isCartaoCredito || cartao.dataFechamento == null) return null;
+  const [y, m] = mesFaturaYm.split("-").map(Number);
+  const d = new Date(y, m - 1, cartao.dataFechamento);
+  d.setDate(d.getDate() + DIAS_APOS_FECHAMENTO);
+  return formatDataLocal(d);
+}
+
+/**
+ * Mês da fatura cujo pagamento cai em `mesPagamentoYm`.
+ * Derivado de fechamento + 7 (não do campo diaPagamento manual).
  */
 export function getMesFaturaPagaEm(
   mesPagamentoYm: string,
   cartao: ContaItem
 ): string | null {
-  if (
-    !cartao.isCartaoCredito ||
-    !cartao.contaPagamentoId ||
-    cartao.diaPagamento == null
-  ) {
+  if (!cartao.isCartaoCredito || !cartao.contaPagamentoId || cartao.dataFechamento == null) {
     return null;
   }
-  const fechamento = cartao.dataFechamento ?? 1;
-  if (cartao.diaPagamento >= fechamento) return mesPagamentoYm;
-  return addMesYm(mesPagamentoYm, -1);
+  for (const mesFatura of [mesPagamentoYm, addMesYm(mesPagamentoYm, -1)]) {
+    const dataPagamento = getDataPagamentoFaturaMes(mesFatura, cartao);
+    if (dataPagamento && dataPagamento.slice(0, 7) === mesPagamentoYm) {
+      return mesFatura;
+    }
+  }
+  return null;
+}
+
+/** True se a data de pagamento (fechamento + 7) da fatura já chegou. */
+export function pagamentoFaturaJaOcorreu(
+  mesFaturaYm: string,
+  cartao: ContaItem,
+  hoje: Date = new Date()
+): boolean {
+  const dataPagamento = getDataPagamentoFaturaMes(mesFaturaYm, cartao);
+  if (!dataPagamento) return false;
+  return hojeYmD(hoje) >= dataPagamento;
 }
 
 /**
@@ -44,14 +93,7 @@ export function getDataVencimentoFatura(
     return t.data;
   }
   const mesEfetivo = getMesEfetivo(t, contas);
-  const [y, m] = mesEfetivo.split("-").map(Number);
-  const diaFechamento = conta.dataFechamento;
-  const dataFechamento = new Date(y, m - 1, diaFechamento);
-  dataFechamento.setDate(dataFechamento.getDate() + DIAS_APOS_FECHAMENTO);
-  const yy = dataFechamento.getFullYear();
-  const mm = String(dataFechamento.getMonth() + 1).padStart(2, "0");
-  const dd = String(dataFechamento.getDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
+  return getDataPagamentoFaturaMes(mesEfetivo, conta) ?? t.data;
 }
 
 /**

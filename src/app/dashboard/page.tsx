@@ -494,7 +494,8 @@ export default function DashboardPage() {
                 <h3 className="text-slate-300 font-medium">Saldo por conta</h3>
                 <p className="text-xs text-slate-500 mb-3 mt-0.5">
                   Carry-over em contas de caixa a partir de jul/2026. Cartões não
-                  acumulam; faturas com conta de pagamento saem do saldo dela.
+                  acumulam; faturas com conta de pagamento saem no vencimento
+                  (fechamento + 7 dias).
                 </p>
                 <ul className="space-y-1">
                   {stats.topContas.map(([conta, saldo]) => (
@@ -651,7 +652,7 @@ export default function DashboardPage() {
                           Pagamento fatura {p.cartaoNome}
                         </p>
                         <p className="text-xs text-slate-500 mt-0.5">
-                          Dia {p.diaPagamento} · fatura {p.mesFatura}
+                          Dia {p.diaPagamento} ({p.dataPagamento}) · fatura {p.mesFatura}
                         </p>
                       </div>
                       <span className="font-medium shrink-0 text-red-400">

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus, Trash2, Pencil, CreditCard, TrendingUp } from "lucide-react";
 import { useData } from "@/context/DataContext";
 import type { ContaItem } from "@/context/DataContext";
+import { diaPagamentoFromFechamento } from "@/lib/fluxoCaixa";
 
 export default function ContasPage() {
   const { contas, loading, saveConta, deleteConta } = useData();
@@ -15,11 +16,12 @@ export default function ContasPage() {
   const [formInvestimento, setFormInvestimento] = useState(false);
   const [formDataFechamento, setFormDataFechamento] = useState<number>(10);
   const [formContaPagamentoId, setFormContaPagamentoId] = useState("");
-  const [formDiaPagamento, setFormDiaPagamento] = useState<number>(14);
 
   const contasPagamento = contas.filter(
     (c) => !c.isCartaoCredito && !c.isInvestimento && c.id !== editingConta?.id
   );
+
+  const diaPagamentoDerivado = diaPagamentoFromFechamento(formDataFechamento);
 
   const resetForm = () => {
     setFormNome("");
@@ -27,7 +29,6 @@ export default function ContasPage() {
     setFormInvestimento(false);
     setFormDataFechamento(10);
     setFormContaPagamentoId("");
-    setFormDiaPagamento(14);
   };
 
   const openNewForm = () => {
@@ -43,7 +44,6 @@ export default function ContasPage() {
     setFormInvestimento(conta.isInvestimento ?? false);
     setFormDataFechamento(conta.dataFechamento ?? 10);
     setFormContaPagamentoId(conta.contaPagamentoId ?? "");
-    setFormDiaPagamento(conta.diaPagamento ?? 14);
     setShowForm(false);
   };
 
@@ -60,7 +60,7 @@ export default function ContasPage() {
           : undefined,
       diaPagamento:
         formCartaoCredito && formContaPagamentoId
-          ? formDiaPagamento
+          ? diaPagamentoFromFechamento(formDataFechamento)
           : undefined,
       isInvestimento: formInvestimento,
     };
@@ -120,25 +120,10 @@ export default function ContasPage() {
             </select>
           </div>
           {formContaPagamentoId && (
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">
-                Dia do pagamento
-              </label>
-              <select
-                value={formDiaPagamento}
-                onChange={(e) => setFormDiaPagamento(parseInt(e.target.value, 10))}
-                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
-              >
-                {Array.from({ length: 31 }, (_, i) => i + 1).map((dia) => (
-                  <option key={dia} value={dia}>
-                    Dia {dia}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-slate-500">
-                A fatura será descontada desta conta de caixa no saldo do mês.
-              </p>
-            </div>
+            <p className="text-xs text-slate-500">
+              Pagamento automático no vencimento: fechamento + 7 dias (dia{" "}
+              {diaPagamentoDerivado}). Só debita depois dessa data.
+            </p>
           )}
         </>
       )}
@@ -316,7 +301,12 @@ export default function ContasPage() {
                             ? `Fechamento: dia ${conta.dataFechamento}`
                             : null,
                           conta.contaPagamentoId
-                            ? `Pagamento: dia ${conta.diaPagamento ?? "?"} via ${
+                            ? `Pagamento: fechamento + 7 (dia ${
+                                conta.diaPagamento ??
+                                (conta.dataFechamento != null
+                                  ? diaPagamentoFromFechamento(conta.dataFechamento)
+                                  : "?")
+                              }) via ${
                                 contas.find((c) => c.id === conta.contaPagamentoId)?.nome ?? "?"
                               }`
                             : null,
