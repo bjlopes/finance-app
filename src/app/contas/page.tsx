@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, Pencil, CreditCard, TrendingUp } from "lucide-react";
+import { Plus, Trash2, Pencil, CreditCard, TrendingUp, FolderKanban } from "lucide-react";
 import { useData } from "@/context/DataContext";
 import type { ContaItem } from "@/context/DataContext";
 import { diaPagamentoFromFechamento } from "@/lib/fluxoCaixa";
@@ -14,11 +14,16 @@ export default function ContasPage() {
   const [formNome, setFormNome] = useState("");
   const [formCartaoCredito, setFormCartaoCredito] = useState(false);
   const [formInvestimento, setFormInvestimento] = useState(false);
+  const [formProjeto, setFormProjeto] = useState(false);
   const [formDataFechamento, setFormDataFechamento] = useState<number>(10);
   const [formContaPagamentoId, setFormContaPagamentoId] = useState("");
 
   const contasPagamento = contas.filter(
-    (c) => !c.isCartaoCredito && !c.isInvestimento && c.id !== editingConta?.id
+    (c) =>
+      !c.isCartaoCredito &&
+      !c.isInvestimento &&
+      !c.isProjeto &&
+      c.id !== editingConta?.id
   );
 
   const diaPagamentoDerivado = diaPagamentoFromFechamento(formDataFechamento);
@@ -27,6 +32,7 @@ export default function ContasPage() {
     setFormNome("");
     setFormCartaoCredito(false);
     setFormInvestimento(false);
+    setFormProjeto(false);
     setFormDataFechamento(10);
     setFormContaPagamentoId("");
   };
@@ -42,6 +48,7 @@ export default function ContasPage() {
     setFormNome(conta.nome);
     setFormCartaoCredito(conta.isCartaoCredito ?? false);
     setFormInvestimento(conta.isInvestimento ?? false);
+    setFormProjeto(conta.isProjeto ?? false);
     setFormDataFechamento(conta.dataFechamento ?? 10);
     setFormContaPagamentoId(conta.contaPagamentoId ?? "");
     setShowForm(false);
@@ -63,6 +70,7 @@ export default function ContasPage() {
           ? diaPagamentoFromFechamento(formDataFechamento)
           : undefined,
       isInvestimento: formInvestimento,
+      isProjeto: formProjeto,
     };
   };
 
@@ -207,6 +215,18 @@ export default function ContasPage() {
                 Conta de investimento (aportes e resgates no dashboard)
               </label>
             </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="contaProjeto"
+                checked={formProjeto}
+                onChange={(e) => setFormProjeto(e.target.checked)}
+                className="rounded border-slate-600 bg-slate-800 text-brand-500 focus:ring-brand-500"
+              />
+              <label htmlFor="contaProjeto" className="text-sm text-slate-400 cursor-pointer">
+                Projeto (entradas e saídas separadas no dashboard)
+              </label>
+            </div>
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -268,6 +288,15 @@ export default function ContasPage() {
                       />
                       Inv.
                     </label>
+                    <label className="flex items-center gap-1.5 text-sm text-slate-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formProjeto}
+                        onChange={(e) => setFormProjeto(e.target.checked)}
+                        className="rounded border-slate-600 bg-slate-800 text-brand-500"
+                      />
+                      Proj.
+                    </label>
                   </div>
                   {camposCartao}
                   <div className="flex gap-2">
@@ -326,6 +355,15 @@ export default function ContasPage() {
                     >
                       <TrendingUp size={12} />
                       Invest.
+                    </span>
+                  )}
+                  {conta.isProjeto && (
+                    <span
+                      className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/40"
+                      title="Entradas e saídas desta conta, e gastos com tag do projeto, aparecem na seção Projetos"
+                    >
+                      <FolderKanban size={12} />
+                      Projeto
                     </span>
                   )}
                   <button

@@ -5,6 +5,7 @@ import {
   hasTagTransacoesInternas,
   isFluxoReal,
   isTransacaoInvestimento,
+  isTransacaoProjeto,
 } from "@/lib/transferencias";
 
 export interface InsightPontual {
@@ -123,6 +124,7 @@ function isDespesaVida(t: Transacao, contas: ContaItem[], tags: Tag[]): boolean 
     t.valor < 0 &&
     isFluxoReal(t) &&
     !isTransacaoInvestimento(t, contas, tags) &&
+    !isTransacaoProjeto(t, contas, tags) &&
     !hasTagTransacoesInternas(t, tags)
   );
 }
@@ -133,6 +135,7 @@ function isReceitaVida(t: Transacao, contas: ContaItem[], tags: Tag[]): boolean 
     t.valor > 0 &&
     isFluxoReal(t) &&
     !isTransacaoInvestimento(t, contas, tags) &&
+    !isTransacaoProjeto(t, contas, tags) &&
     !hasTagTransacoesInternas(t, tags) &&
     !descricao.includes("saldo inicial")
   );

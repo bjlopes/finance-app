@@ -203,6 +203,31 @@ section("Total caixa de julho (sem investimento nem cartões)");
 const totalCaixa = somarSaldoPorContaMes(julho.saldoFinal, contas, "caixa");
 assert(approx(totalCaixa, 2050), "caixa = Itaú 2300 + Nubank -600 + Flash 350");
 
+section("Projeto fora do carry-over e do total caixa");
+const contasComProjeto: ContaItem[] = [
+  ...contas,
+  { id: "7", nome: "Cabo Frio", isProjeto: true },
+];
+const txComProjeto: Transacao[] = [
+  ...transacoes,
+  { id: "proj-1", descricao: "Obra", valor: -800, conta: "Cabo Frio", data: "2026-07-15", tagIds: [] },
+  { id: "proj-2", descricao: "Entrada obra", valor: 2000, conta: "Cabo Frio", data: "2026-07-08", tagIds: [] },
+];
+const julhoProj = calcularSaldosContaMes(
+  txComProjeto,
+  txComProjeto.filter((t) => getMesEfetivo(t, contasComProjeto) === "2026-07"),
+  contasComProjeto,
+  "2026-07",
+  undefined,
+  HOJE_ANTES_VENC_AGO
+);
+assert(julhoProj.saldoFinal["Cabo Frio"] === undefined, "projeto sem saldo acumulado");
+assert(julhoProj.movimentoMes["Cabo Frio"] === undefined, "movimento de projeto fora do caixa");
+assert(
+  approx(somarSaldoPorContaMes(julhoProj.saldoFinal, contasComProjeto, "caixa"), 2050),
+  "total caixa inalterado pelo projeto"
+);
+
 section("Filtro de conta ativa");
 const soItau = saldosNoMes("2026-07", ["Itaú"]);
 assert(soItau.saldoFinal["Nubank"] === undefined, "Nubank fora do filtro");

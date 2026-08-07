@@ -77,14 +77,23 @@ export function isContaInvestimento(nome: string, contas: ContaItem[]): boolean 
   return Boolean(conta?.isInvestimento);
 }
 
+export function isContaProjeto(nome: string, contas: ContaItem[]): boolean {
+  const conta = contas.find((c) => c.nome === nome);
+  return Boolean(conta?.isProjeto);
+}
+
 export function isContaCartaoCredito(nome: string, contas: ContaItem[]): boolean {
   const conta = contas.find((c) => c.nome === nome);
   return Boolean(conta?.isCartaoCredito);
 }
 
-/** Contas que acumulam saldo mês a mês (corrente, Flash etc.). Cartões e investimentos ficam de fora. */
+/** Contas que acumulam saldo mês a mês (corrente, Flash etc.). Cartões, investimentos e projetos ficam de fora. */
 export function isContaComCarryOver(nome: string, contas: ContaItem[]): boolean {
-  return !isContaInvestimento(nome, contas) && !isContaCartaoCredito(nome, contas);
+  return (
+    !isContaInvestimento(nome, contas) &&
+    !isContaCartaoCredito(nome, contas) &&
+    !isContaProjeto(nome, contas)
+  );
 }
 
 function normalizarLabel(label: string): string {
@@ -128,7 +137,11 @@ export function migrarContasCartoesPagamento(contas: ContaItem[]): {
   alteradas: number;
 } {
   const nubankCaixa = contas.find(
-    (c) => isNomeNubankCaixa(c.nome) && !c.isCartaoCredito && !c.isInvestimento
+    (c) =>
+      isNomeNubankCaixa(c.nome) &&
+      !c.isCartaoCredito &&
+      !c.isInvestimento &&
+      !c.isProjeto
   );
 
   let alteradas = 0;
@@ -200,6 +213,81 @@ export function isTransacaoInvestimento(
   tags: Tag[] = []
 ): boolean {
   return isContaInvestimento(t.conta, contas) || hasTagInvestimento(t, tags);
+}
+
+/** Nomes normalizados das contas marcadas como projeto. */
+function nomesContasProjeto(contas: ContaItem[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const c of contas) {
+    if (!c.isProjeto) continue;
+    map.set(normalizarLabel(c.nome), c.nome);
+  }
+  return map;
+}
+
+/**
+ * Tag (ou ancestral) cujo nome bate com alguma conta projeto
+ * (acentos/caixa/espaços normalizados), no espírito de hasTagInvestimento.
+ */
+function isTagOuAncestralProjeto(
+  tagId: string,
+  tags: Tag[] = [],
+  projetosPorNome: Map<string, string>,
+  visitados = new Set<string>()
+): string | null {
+  if (visitados.has(tagId)) return null;
+  visitados.add(tagId);
+  const tag = tags.find((t) => t.id === tagId);
+  if (!tag) return null;
+  const match = projetosPorNome.get(normalizarLabel(tag.nome));
+  if (match) return match;
+  if (!tag.parentId) return null;
+  return isTagOuAncestralProjeto(tag.parentId, tags, projetosPorNome, visitados);
+}
+
+/** Transação com tag (ou ancestral) cujo nome corresponde a uma conta projeto. */
+export function hasTagProjeto(
+  t: Transacao,
+  contas: ContaItem[],
+  tags: Tag[] = []
+): boolean {
+  return Boolean(resolverNomeProjetoPorTag(t, contas, tags));
+}
+
+/** Nome da conta projeto casada pela tag (ou ancestral), se houver. */
+export function resolverNomeProjetoPorTag(
+  t: Transacao,
+  contas: ContaItem[],
+  tags: Tag[] = []
+): string | null {
+  const projetosPorNome = nomesContasProjeto(contas);
+  if (projetosPorNome.size === 0) return null;
+  for (const tagId of t.tagIds) {
+    const nome = isTagOuAncestralProjeto(tagId, tags, projetosPorNome);
+    if (nome) return nome;
+  }
+  return null;
+}
+
+/**
+ * Nome do projeto ao qual a transação pertence:
+ * conta projeto tem prioridade; senão tag/ancestral com nome da conta projeto.
+ */
+export function resolverNomeProjeto(
+  t: Transacao,
+  contas: ContaItem[],
+  tags: Tag[] = []
+): string | null {
+  if (isContaProjeto(t.conta, contas)) return t.conta;
+  return resolverNomeProjetoPorTag(t, contas, tags);
+}
+
+export function isTransacaoProjeto(
+  t: Transacao,
+  contas: ContaItem[],
+  tags: Tag[] = []
+): boolean {
+  return isContaProjeto(t.conta, contas) || hasTagProjeto(t, contas, tags);
 }
 
 export interface MovimentosInvestimento {
@@ -291,6 +379,104 @@ export function calcularMovimentosInvestimento(
   return { aportes, resgates, qtdAportes, qtdResgates, transacoesResgate, transacoesAporte };
 }
 
+export interface MovimentosProjetoConta {
+  contaNome: string;
+  entradas: number;
+  saidas: number;
+  liquido: number;
+  qtdEntradas: number;
+  qtdSaidas: number;
+  transacoesEntrada: Transacao[];
+  transacoesSaida: Transacao[];
+}
+
+export interface MovimentosProjeto {
+  entradas: number;
+  saidas: number;
+  liquido: number;
+  qtdEntradas: number;
+  qtdSaidas: number;
+  porConta: MovimentosProjetoConta[];
+  transacoesEntrada: Transacao[];
+  transacoesSaida: Transacao[];
+}
+
+/**
+ * Entradas e saídas de projetos no mês.
+ * Inclui lançamentos na conta projeto e gastos/receitas em outras contas
+ * com tag (ou ancestral) cujo nome corresponde ao projeto.
+ */
+export function calcularMovimentosProjeto(
+  transacoes: Transacao[],
+  contas: ContaItem[],
+  mesYm: string,
+  mesEfetivoDe: (t: Transacao) => string,
+  contasAtivas?: string[],
+  tags: Tag[] = []
+): MovimentosProjeto {
+  const porNome = new Map<string, MovimentosProjetoConta>();
+
+  const ensure = (nome: string): MovimentosProjetoConta => {
+    let row = porNome.get(nome);
+    if (!row) {
+      row = {
+        contaNome: nome,
+        entradas: 0,
+        saidas: 0,
+        liquido: 0,
+        qtdEntradas: 0,
+        qtdSaidas: 0,
+        transacoesEntrada: [],
+        transacoesSaida: [],
+      };
+      porNome.set(nome, row);
+    }
+    return row;
+  };
+
+  for (const t of transacoes) {
+    if (mesEfetivoDe(t) !== mesYm) continue;
+    const projetoNome = resolverNomeProjeto(t, contas, tags);
+    if (!projetoNome) continue;
+    if (contasAtivas && !contasAtivas.includes(t.conta)) continue;
+
+    const row = ensure(projetoNome);
+    const valor = Math.abs(t.valor);
+    if (t.valor > 0) {
+      row.entradas += valor;
+      row.qtdEntradas += 1;
+      row.transacoesEntrada.push(t);
+    } else if (t.valor < 0) {
+      row.saidas += valor;
+      row.qtdSaidas += 1;
+      row.transacoesSaida.push(t);
+    }
+  }
+
+  const porConta = Array.from(porNome.values())
+    .map((row) => ({
+      ...row,
+      liquido: row.entradas - row.saidas,
+    }))
+    .sort((a, b) => a.contaNome.localeCompare(b.contaNome, "pt-BR"));
+
+  const entradas = porConta.reduce((s, c) => s + c.entradas, 0);
+  const saidas = porConta.reduce((s, c) => s + c.saidas, 0);
+  const qtdEntradas = porConta.reduce((s, c) => s + c.qtdEntradas, 0);
+  const qtdSaidas = porConta.reduce((s, c) => s + c.qtdSaidas, 0);
+
+  return {
+    entradas,
+    saidas,
+    liquido: entradas - saidas,
+    qtdEntradas,
+    qtdSaidas,
+    porConta,
+    transacoesEntrada: porConta.flatMap((c) => c.transacoesEntrada),
+    transacoesSaida: porConta.flatMap((c) => c.transacoesSaida),
+  };
+}
+
 /** Movimento líquido de cada conta no mês (inclui transferências e aportes). */
 export function calcularSaldoPorContaMes(
   transacoesMes: Transacao[]
@@ -303,15 +489,17 @@ export function calcularSaldoPorContaMes(
 }
 
 /**
- * Remove contas de investimento do mapa de saldos.
- * Investimentos só rastreiam aportes/resgates — sem saldo inicial/final.
+ * Remove contas de investimento e projeto do mapa de saldos.
+ * Investimentos e projetos só rastreiam movimentos próprios — sem saldo inicial/final de caixa.
  */
 export function filtrarSaldosCaixa(
   saldoPorConta: Record<string, number>,
   contas: ContaItem[]
 ): Record<string, number> {
   return Object.fromEntries(
-    Object.entries(saldoPorConta).filter(([nome]) => !isContaInvestimento(nome, contas))
+    Object.entries(saldoPorConta).filter(
+      ([nome]) => !isContaInvestimento(nome, contas) && !isContaProjeto(nome, contas)
+    )
   );
 }
 
@@ -401,6 +589,7 @@ function aplicarPagamentosNoMapa(
 /**
  * Saldo das contas no mês selecionado.
  * - Contas de investimento ficam de fora (só aportes/resgates).
+ * - Contas de projeto ficam de fora (só entradas/saídas na seção Projetos).
  * - Cartões de crédito NÃO fazem carry-over: o saldo do mês é só a fatura daquele ciclo.
  * - Contas de caixa (corrente, Flash etc.) carregam saldo a partir de SALDO_CARRY_OVER_INICIO.
  * - Cartões com conta de pagamento debitam a fatura no vencimento (fechamento + 7 dias),
@@ -460,7 +649,7 @@ export function calcularSaldosContaMes(
 /**
  * Soma o movimento das contas no mês.
  * - patrimônio: todas as contas (transferências se cancelam entre si)
- * - caixa: só contas não-investimento e não-cartão (= dinheiro disponível)
+ * - caixa: só contas não-investimento, não-cartão e não-projeto (= dinheiro disponível)
  */
 export function somarSaldoPorContaMes(
   saldoPorConta: Record<string, number>,
@@ -475,7 +664,7 @@ export function somarSaldoPorContaMes(
 
 /**
  * Receitas do dashboard: só entradas reais (custo de vida / renda).
- * Resgates de investimento ficam na seção Investimentos.
+ * Resgates de investimento e entradas de projeto ficam nas seções próprias.
  */
 export function totalReceitasDashboard(receitasFluxo: number): number {
   return receitasFluxo;
@@ -483,7 +672,7 @@ export function totalReceitasDashboard(receitasFluxo: number): number {
 
 /**
  * Gastos do dashboard: só saídas reais (custo de vida).
- * Aportes para investimento ficam na seção Investimentos.
+ * Aportes para investimento e saídas de projeto ficam nas seções próprias.
  */
 export function totalGastosDashboard(gastosFluxo: number): number {
   return gastosFluxo;

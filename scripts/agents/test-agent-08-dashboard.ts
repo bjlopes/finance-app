@@ -6,7 +6,9 @@ import { getMesEfetivo } from "../../src/lib/fluxoCaixa";
 import {
   isFluxoReal,
   isTransacaoInvestimento,
+  isTransacaoProjeto,
   calcularMovimentosInvestimento,
+  calcularMovimentosProjeto,
   calcularSaldoMes,
   calcularSaldosContaMes,
   somarSaldoPorContaMes,
@@ -30,10 +32,18 @@ function calcDashboardStats(
   transacoesMes = transacoesMes.filter((t) => contasAtivas.includes(t.conta));
 
   const gastos = transacoesMes.filter(
-    (t) => t.valor < 0 && isFluxoReal(t) && !isTransacaoInvestimento(t, contas, tags)
+    (t) =>
+      t.valor < 0 &&
+      isFluxoReal(t) &&
+      !isTransacaoInvestimento(t, contas, tags) &&
+      !isTransacaoProjeto(t, contas, tags)
   );
   const receitas = transacoesMes.filter(
-    (t) => t.valor > 0 && isFluxoReal(t) && !isTransacaoInvestimento(t, contas, tags)
+    (t) =>
+      t.valor > 0 &&
+      isFluxoReal(t) &&
+      !isTransacaoInvestimento(t, contas, tags) &&
+      !isTransacaoProjeto(t, contas, tags)
   );
   const gastosFluxo = gastos.reduce((sum, t) => sum + Math.abs(t.valor), 0);
   const receitasFluxo = receitas.reduce((sum, t) => sum + t.valor, 0);
@@ -63,6 +73,15 @@ function calcDashboardStats(
     tags
   );
 
+  const projeto = calcularMovimentosProjeto(
+    transacoes,
+    contas,
+    mesSelecionado,
+    (t) => getMesEfetivo(t, contas),
+    contasAtivas,
+    tags
+  );
+
   const totalGastos = totalGastosDashboard(gastosFluxo);
   const totalReceitas = totalReceitasDashboard(receitasFluxo);
   const saldo = calcularSaldoMes(totalReceitas, totalGastos);
@@ -80,6 +99,7 @@ function calcDashboardStats(
     saldoFinalPorConta: saldosConta.saldoFinal,
     tagHierarchy: buildTagSpendingHierarchy(tags, gastosPorTagId),
     investimento,
+    projeto,
   };
 }
 
@@ -311,5 +331,119 @@ assert(approx(soNubankComResgate.investimento.resgates, 300), "resgate para cont
 assert(approx(soNubankComResgate.totalReceitas, 5000), "receitas sem resgate");
 assert(approx(soNubankComResgate.saldo, 2950), "saldo de custo de vida coerente");
 assert(approx(soNubankComResgate.somaCaixaMes, 2250), "caixa final com resgate");
+
+section("Projeto — fora do custo de vida e do caixa");
+const contasComProjeto: ContaItem[] = [
+  ...contas,
+  { id: "3", nome: "Cabo Frio", isProjeto: true },
+];
+const comProjeto = calcDashboardStats(
+  [
+    { id: "p0", descricao: "Salário", valor: 5000, conta: "Nubank", data: "2025-06-05", tagIds: [] },
+    { id: "p1", descricao: "Mercado", valor: -100, conta: "Nubank", data: "2025-06-08", tagIds: ["t2"] },
+    { id: "p2", descricao: "Material obra", valor: -2500, conta: "Cabo Frio", data: "2025-06-12", tagIds: ["t2"] },
+    { id: "p3", descricao: "Aporte projeto", valor: 4000, conta: "Cabo Frio", data: "2025-06-10", tagIds: [] },
+  ],
+  tags,
+  contasComProjeto,
+  "2025-06",
+  ["Nubank", "Investimentos", "Cabo Frio"]
+);
+assert(approx(comProjeto.totalGastos, 100), "gasto de projeto não entra em Gastos");
+assert(approx(comProjeto.totalReceitas, 5000), "entrada de projeto não entra em Receitas");
+assert(approx(comProjeto.saldo, 4900), "saldo de vida ignora projeto");
+assert(approx(comProjeto.gastosPorTagId["t2"] ?? 0, 100), "tag só com gasto de vida");
+assert(approx(comProjeto.projeto.entradas, 4000), "entrada no projeto");
+assert(approx(comProjeto.projeto.saidas, 2500), "saída no projeto");
+assert(approx(comProjeto.projeto.liquido, 1500), "líquido do projeto");
+assert(comProjeto.saldoFinalPorConta["Cabo Frio"] === undefined, "projeto sem saldo de caixa");
+assert(approx(comProjeto.somaCaixaMes, 4900), "caixa só Nubank (sem projeto)");
+
+section("Projeto — tag com nome do projeto também separa");
+const tagsComProjeto: Tag[] = [
+  ...tags,
+  { id: "t-cf", nome: "Cabo Frio", cor: "#a78bfa" },
+  { id: "t-cf-mat", nome: "Materiais", cor: "#c4b5fd", parentId: "t-cf" },
+];
+const comTagProjeto = calcDashboardStats(
+  [
+    { id: "tp0", descricao: "Salário", valor: 5000, conta: "Nubank", data: "2025-06-05", tagIds: [] },
+    { id: "tp1", descricao: "Mercado", valor: -100, conta: "Nubank", data: "2025-06-08", tagIds: ["t2"] },
+    {
+      id: "tp2",
+      descricao: "Cimento na Nubank",
+      valor: -800,
+      conta: "Nubank",
+      data: "2025-06-12",
+      tagIds: ["t-cf"],
+    },
+    {
+      id: "tp3",
+      descricao: "Tinta subtag",
+      valor: -200,
+      conta: "Nubank",
+      data: "2025-06-14",
+      tagIds: ["t-cf-mat"],
+    },
+    {
+      id: "tp4",
+      descricao: "Gasto na conta projeto",
+      valor: -500,
+      conta: "Cabo Frio",
+      data: "2025-06-15",
+      tagIds: [],
+    },
+    {
+      id: "tp5",
+      descricao: "Aporte na conta projeto",
+      valor: 3000,
+      conta: "Cabo Frio",
+      data: "2025-06-10",
+      tagIds: [],
+    },
+  ],
+  tagsComProjeto,
+  contasComProjeto,
+  "2025-06",
+  ["Nubank", "Investimentos", "Cabo Frio"]
+);
+assert(approx(comTagProjeto.totalGastos, 100), "tag projeto fora de Gastos");
+assert(approx(comTagProjeto.gastosPorTagId["t2"] ?? 0, 100), "gastos por tag só vida");
+assert(approx(comTagProjeto.gastosPorTagId["t-cf"] ?? 0, 0), "tag projeto fora de gastos por tag");
+assert(approx(comTagProjeto.projeto.saidas, 1500), "saídas = tag + ancestral + conta projeto");
+assert(approx(comTagProjeto.projeto.entradas, 3000), "entrada só na conta projeto");
+assert(approx(comTagProjeto.projeto.liquido, 1500), "líquido com tags");
+assert(comTagProjeto.projeto.porConta.length === 1, "agrupa sob Cabo Frio");
+assert(comTagProjeto.projeto.porConta[0].contaNome === "Cabo Frio", "nome do projeto");
+assert(approx(comTagProjeto.somaCaixaMes, 3900), "caixa Nubank desconta gasto tagged (5000-100-800-200)");
+assert(isTransacaoProjeto(
+  { id: "x", descricao: "x", valor: -1, conta: "Nubank", data: "2025-06-01", tagIds: ["t-cf"] },
+  contasComProjeto,
+  tagsComProjeto
+), "isTransacaoProjeto por tag");
+
+section("Projeto — tag com acento/caixa normalizados");
+const tagsAcento: Tag[] = [
+  { id: "t-accent", nome: "cabo frio", cor: "#a78bfa" },
+];
+const comAcento = calcDashboardStats(
+  [
+    { id: "a1", descricao: "Uber", valor: -50, conta: "Nubank", data: "2025-06-01", tagIds: [] },
+    {
+      id: "a2",
+      descricao: "Gasto tagged",
+      valor: -120,
+      conta: "Nubank",
+      data: "2025-06-02",
+      tagIds: ["t-accent"],
+    },
+  ],
+  tagsAcento,
+  contasComProjeto,
+  "2025-06",
+  ["Nubank", "Cabo Frio"]
+);
+assert(approx(comAcento.totalGastos, 50), "só uber em gastos de vida");
+assert(approx(comAcento.projeto.saidas, 120), "match case-insensitive com nome do projeto");
 
 process.exit(exitCode());

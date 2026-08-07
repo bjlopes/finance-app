@@ -33,6 +33,8 @@ export interface ContaItem {
   diaPagamento?: number;
   /** Conta de investimento — transferências para/de ela viram aporte/resgate no dashboard */
   isInvestimento?: boolean;
+  /** Conta de projeto (ex. Cabo Frio) — entradas/saídas no dashboard, fora do custo de vida e do caixa */
+  isProjeto?: boolean;
 }
 
 interface DataContextValue {

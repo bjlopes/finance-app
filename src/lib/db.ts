@@ -16,6 +16,7 @@ export interface DbContaItem {
   contaPagamentoId?: string;
   diaPagamento?: number;
   isInvestimento?: boolean;
+  isProjeto?: boolean;
 }
 
 const DEFAULT_CONTAS: DbContaItem[] = [

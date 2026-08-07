@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { TrendingUp, TrendingDown, Wallet, Receipt, Tag, ChevronLeft, ChevronRight, Check, ChevronDown, X } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Receipt, Tag, ChevronLeft, ChevronRight, Check, ChevronDown, X, FolderKanban } from "lucide-react";
 import { buildTagSpendingHierarchy } from "@/lib/tags-utils";
 import { GastosPorTagHierarquico } from "@/components/GastosPorTagHierarquico";
 import { DonutChart } from "@/components/DonutChart";
 import Link from "next/link";
 import { useData } from "@/context/DataContext";
 import { getMesEfetivo } from "@/lib/fluxoCaixa";
-import { isFluxoReal, isTransacaoInvestimento, hasTagTransacoesInternas, isContaInvestimento, calcularMovimentosInvestimento, calcularSaldoMes, calcularSaldosContaMes, somarSaldoPorContaMes, totalReceitasDashboard, totalGastosDashboard, getContaDestinoTransferencia, getContaOrigemTransferencia } from "@/lib/transferencias";
+import { isFluxoReal, isTransacaoInvestimento, isTransacaoProjeto, hasTagTransacoesInternas, calcularMovimentosInvestimento, calcularMovimentosProjeto, calcularSaldoMes, calcularSaldosContaMes, somarSaldoPorContaMes, totalReceitasDashboard, totalGastosDashboard, getContaDestinoTransferencia, getContaOrigemTransferencia, resolverNomeProjeto } from "@/lib/transferencias";
 import { formatLocalDate } from "@/lib/dateUtils";
 import { compareTransacoesDesc } from "@/lib/transacoes-utils";
 
@@ -54,6 +54,8 @@ export default function DashboardPage() {
   const [receitasModalOpen, setReceitasModalOpen] = useState(false);
   const [aportesModalOpen, setAportesModalOpen] = useState(false);
   const [resgatesModalOpen, setResgatesModalOpen] = useState(false);
+  const [projetoEntradasModalOpen, setProjetoEntradasModalOpen] = useState(false);
+  const [projetoSaidasModalOpen, setProjetoSaidasModalOpen] = useState(false);
   const [contaSaldoModal, setContaSaldoModal] = useState<string | null>(null);
   const contasDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -97,6 +99,7 @@ export default function DashboardPage() {
         t.valor < 0 &&
         isFluxoReal(t) &&
         !isTransacaoInvestimento(t, contas, tags) &&
+        !isTransacaoProjeto(t, contas, tags) &&
         !hasTagTransacoesInternas(t, tags)
     );
     const receitas = transacoesMes.filter(
@@ -104,6 +107,7 @@ export default function DashboardPage() {
         t.valor > 0 &&
         isFluxoReal(t) &&
         !isTransacaoInvestimento(t, contas, tags) &&
+        !isTransacaoProjeto(t, contas, tags) &&
         !hasTagTransacoesInternas(t, tags)
     );
     const gastosFluxo = gastos.reduce((sum, t) => sum + Math.abs(t.valor), 0);
@@ -111,6 +115,16 @@ export default function DashboardPage() {
 
     const temContaInvestimento = contas.some((c) => c.isInvestimento);
     const investimento = calcularMovimentosInvestimento(
+      transacoes,
+      contas,
+      mesSelecionado,
+      (t) => getMesEfetivo(t, contas),
+      contasAtivas,
+      tags
+    );
+
+    const temContaProjeto = contas.some((c) => c.isProjeto);
+    const projeto = calcularMovimentosProjeto(
       transacoes,
       contas,
       mesSelecionado,
@@ -176,6 +190,8 @@ export default function DashboardPage() {
       totalTransacoes: transacoes.length,
       temContaInvestimento,
       investimento,
+      temContaProjeto,
+      projeto,
     };
   }, [transacoes, tags, contas, mesSelecionado, contasAtivas]);
 
@@ -342,7 +358,7 @@ export default function DashboardPage() {
               Fluxo do mês
             </h2>
             <p className="text-xs text-slate-500 -mt-4">
-              Custo de vida — aportes e resgates ficam em Investimentos
+              Custo de vida — aportes/resgates em Investimentos; projetos em Projetos
             </p>
 
             <div className="grid grid-cols-2 gap-4">
@@ -457,6 +473,100 @@ export default function DashboardPage() {
                       Contas
                     </Link>{" "}
                     como investimento para contabilizar aportes automaticamente.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {(stats.temContaProjeto ||
+              stats.projeto.entradas > 0 ||
+              stats.projeto.saidas > 0) && (
+              <div className="pt-3 border-t border-slate-700/50 space-y-3">
+                <h3 className="flex items-center gap-2 text-slate-300 font-medium text-sm">
+                  <FolderKanban size={16} className="text-violet-300" />
+                  Projetos
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      stats.projeto.qtdEntradas > 0 && setProjetoEntradasModalOpen(true)
+                    }
+                    className={`text-left ${
+                      stats.projeto.qtdEntradas > 0
+                        ? "cursor-pointer hover:opacity-90"
+                        : "cursor-default"
+                    }`}
+                  >
+                    <p className="text-xs text-slate-500 mb-1">Entradas no mês</p>
+                    <p className="text-lg font-bold text-brand-400 tabular-nums">
+                      {formatBRL(stats.projeto.entradas)}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {stats.projeto.qtdEntradas}{" "}
+                      {stats.projeto.qtdEntradas === 1 ? "transação" : "transações"}
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      stats.projeto.qtdSaidas > 0 && setProjetoSaidasModalOpen(true)
+                    }
+                    className={`text-left ${
+                      stats.projeto.qtdSaidas > 0
+                        ? "cursor-pointer hover:opacity-90"
+                        : "cursor-default"
+                    }`}
+                  >
+                    <p className="text-xs text-slate-500 mb-1">Saídas no mês</p>
+                    <p className="text-lg font-bold text-red-400 tabular-nums">
+                      {formatBRL(stats.projeto.saidas)}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {stats.projeto.qtdSaidas}{" "}
+                      {stats.projeto.qtdSaidas === 1 ? "transação" : "transações"}
+                    </p>
+                  </button>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">Líquido no mês</span>
+                  <span
+                    className={`font-medium tabular-nums ${
+                      stats.projeto.liquido >= 0 ? "text-brand-400" : "text-red-400"
+                    }`}
+                  >
+                    {formatBRL(stats.projeto.liquido)}
+                  </span>
+                </div>
+                {stats.projeto.porConta.length > 0 && (
+                  <ul className="space-y-1.5 pt-1">
+                    {stats.projeto.porConta.map((p) => (
+                      <li
+                        key={p.contaNome}
+                        className="flex justify-between gap-2 text-xs text-slate-400"
+                      >
+                        <span className="truncate text-slate-300">
+                          <span className="text-violet-300/90">Projeto</span>{" "}
+                          {p.contaNome}
+                        </span>
+                        <span
+                          className={`shrink-0 tabular-nums ${
+                            p.liquido >= 0 ? "text-brand-400" : "text-red-400"
+                          }`}
+                        >
+                          {formatBRL(p.liquido)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {!stats.temContaProjeto && (
+                  <p className="text-xs text-amber-400/90">
+                    Marque a conta em{" "}
+                    <Link href="/contas" className="text-brand-400 hover:underline">
+                      Contas
+                    </Link>{" "}
+                    como projeto (ex. Cabo Frio). Gastos com tag do projeto também entram aqui.
                   </p>
                 )}
               </div>
@@ -847,6 +957,118 @@ export default function DashboardPage() {
                             {formatBRL(t.valor)}
                           </span>
                         </li>
+                      );
+                    })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {projetoEntradasModalOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => setProjetoEntradasModalOpen(false)}
+        >
+          <div
+            className="modal-content-centered w-full max-w-md overflow-hidden flex flex-col rounded-xl glass shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0 gap-2">
+              <h4 className="font-semibold text-slate-200">Entradas de projetos</h4>
+              <button
+                type="button"
+                onClick={() => setProjetoEntradasModalOpen(false)}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 shrink-0"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-4">
+              {stats.projeto.transacoesEntrada.length === 0 ? (
+                <p className="text-slate-500 text-sm">Nenhuma entrada</p>
+              ) : (
+                <ul className="space-y-2">
+                  {[...stats.projeto.transacoesEntrada]
+                    .sort(compareTransacoesDesc)
+                    .map((t) => {
+                      const projetoNome = resolverNomeProjeto(t, contas, tags);
+                      const contaLabel =
+                        projetoNome && projetoNome !== t.conta
+                          ? `${projetoNome} · ${t.conta}`
+                          : t.conta;
+                      return (
+                      <li
+                        key={t.id}
+                        className="flex justify-between items-start gap-2 py-2 border-b border-slate-700/30 last:border-0"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-slate-200 truncate">{t.descricao}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {formatLocalDate(t.data, { day: "2-digit", month: "short" })} • {contaLabel}
+                          </p>
+                        </div>
+                        <span className="text-brand-400 font-medium shrink-0">
+                          {formatBRL(t.valor)}
+                        </span>
+                      </li>
+                      );
+                    })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {projetoSaidasModalOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => setProjetoSaidasModalOpen(false)}
+        >
+          <div
+            className="modal-content-centered w-full max-w-md overflow-hidden flex flex-col rounded-xl glass shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0 gap-2">
+              <h4 className="font-semibold text-slate-200">Saídas de projetos</h4>
+              <button
+                type="button"
+                onClick={() => setProjetoSaidasModalOpen(false)}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 shrink-0"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 min-h-0 p-4">
+              {stats.projeto.transacoesSaida.length === 0 ? (
+                <p className="text-slate-500 text-sm">Nenhuma saída</p>
+              ) : (
+                <ul className="space-y-2">
+                  {[...stats.projeto.transacoesSaida]
+                    .sort(compareTransacoesDesc)
+                    .map((t) => {
+                      const projetoNome = resolverNomeProjeto(t, contas, tags);
+                      const contaLabel =
+                        projetoNome && projetoNome !== t.conta
+                          ? `${projetoNome} · ${t.conta}`
+                          : t.conta;
+                      return (
+                      <li
+                        key={t.id}
+                        className="flex justify-between items-start gap-2 py-2 border-b border-slate-700/30 last:border-0"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-slate-200 truncate">{t.descricao}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {formatLocalDate(t.data, { day: "2-digit", month: "short" })} • {contaLabel}
+                          </p>
+                        </div>
+                        <span className="text-red-400 font-medium shrink-0">
+                          {formatBRL(Math.abs(t.valor))}
+                        </span>
+                      </li>
                       );
                     })}
                 </ul>

@@ -1,5 +1,5 @@
 import { getMesEfetivo } from "@/lib/fluxoCaixa";
-import { isFluxoReal, isTransacaoInvestimento, hasTagTransacoesInternas } from "@/lib/transferencias";
+import { isFluxoReal, isTransacaoInvestimento, isTransacaoProjeto, hasTagTransacoesInternas } from "@/lib/transferencias";
 import type { ContaItem } from "@/context/DataContext";
 import type { Transacao, Tag } from "@/types";
 
@@ -28,6 +28,7 @@ export function calcMesStats(
         t.valor < 0 &&
         isFluxoReal(t) &&
         !isTransacaoInvestimento(t, contas, tags) &&
+        !isTransacaoProjeto(t, contas, tags) &&
         !hasTagTransacoesInternas(t, tags)
     )
     .reduce((sum, t) => sum + t.valor, 0);
@@ -38,6 +39,7 @@ export function calcMesStats(
         t.valor > 0 &&
         isFluxoReal(t) &&
         !isTransacaoInvestimento(t, contas, tags) &&
+        !isTransacaoProjeto(t, contas, tags) &&
         !hasTagTransacoesInternas(t, tags)
     )
     .reduce((sum, t) => sum + t.valor, 0);
@@ -49,6 +51,7 @@ export function calcMesStats(
         t.valor < 0 &&
         isFluxoReal(t) &&
         !isTransacaoInvestimento(t, contas, tags) &&
+        !isTransacaoProjeto(t, contas, tags) &&
         !hasTagTransacoesInternas(t, tags)
     )
     .forEach((t) => {

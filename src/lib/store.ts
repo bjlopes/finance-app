@@ -44,6 +44,7 @@ interface ContaItem {
   contaPagamentoId?: string;
   diaPagamento?: number;
   isInvestimento?: boolean;
+  isProjeto?: boolean;
 }
 
 interface StoredData {
