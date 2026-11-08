@@ -92,91 +92,100 @@ export function DonutChart({
 
   const centerValue = selectedIndex !== null ? segments[selectedIndex]!.value : total;
   const centerLabel = selectedIndex !== null ? segments[selectedIndex]!.label : "total";
+  const centerText = formatValue(centerValue);
+  const centerTextLen = centerText.replace(/\s/g, "").length;
+  const centerValueClass =
+    centerTextLen > 14
+      ? "text-xs sm:text-sm"
+      : centerTextLen > 11
+        ? "text-sm sm:text-base"
+        : "text-base sm:text-lg";
 
   return (
-    <div className="relative flex flex-col items-center w-full max-w-[min(100%,320px)]">
-      <svg
-        width="100%"
-        height="auto"
-        viewBox={viewBox}
-        preserveAspectRatio="xMidYMid meet"
-        className="overflow-visible"
-      >
-        {segments.map((seg, i) => {
-          const isSelected = selectedIndex === i;
-          const isHovered = hoveredIndex === i;
-          const isActive = isSelected || isHovered;
-          return (
-            <g key={i}>
-              <g
-                transform={`rotate(${seg.startAngle}, ${cx}, ${cy})`}
-                className="cursor-pointer"
-                onClick={() => setSelectedIndex(selectedIndex === i ? null : i)}
-                onMouseEnter={() => setHoveredIndex(i)}
-                onMouseLeave={() => setHoveredIndex(null)}
-              >
-                <circle
-                  cx={cx}
-                  cy={cy}
-                  r={radius}
-                  fill="none"
-                  stroke={seg.color}
-                  strokeWidth={strokeWidth}
-                  strokeDasharray={`${seg.strokeLength} ${circumference}`}
-                  strokeLinecap="round"
-                  opacity={isActive ? 1 : 0.75}
-                  className="transition-all duration-200 ease-out"
-                />
-              </g>
-              {seg.showLeader && (
+    <div className="flex flex-col items-center w-full max-w-[min(100%,320px)] min-w-0 mx-auto">
+      <div className="relative w-full">
+        <svg
+          width="100%"
+          height="auto"
+          viewBox={viewBox}
+          preserveAspectRatio="xMidYMid meet"
+          className="overflow-hidden sm:overflow-visible"
+        >
+          {segments.map((seg, i) => {
+            const isSelected = selectedIndex === i;
+            const isHovered = hoveredIndex === i;
+            const isActive = isSelected || isHovered;
+            return (
+              <g key={i}>
                 <g
+                  transform={`rotate(${seg.startAngle}, ${cx}, ${cy})`}
                   className="cursor-pointer"
                   onClick={() => setSelectedIndex(selectedIndex === i ? null : i)}
                   onMouseEnter={() => setHoveredIndex(i)}
                   onMouseLeave={() => setHoveredIndex(null)}
                 >
-                  <line
-                    x1={seg.tick1X}
-                    y1={seg.tick1Y}
-                    x2={seg.tick2X}
-                    y2={seg.tick2Y}
-                    stroke={LINE_COLOR}
-                    strokeWidth="1"
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={radius}
+                    fill="none"
+                    stroke={seg.color}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={`${seg.strokeLength} ${circumference}`}
+                    strokeLinecap="round"
+                    opacity={isActive ? 1 : 0.75}
+                    className="transition-all duration-200 ease-out"
                   />
-                  <line
-                    x1={seg.innerX}
-                    y1={seg.innerY}
-                    x2={seg.outerX}
-                    y2={seg.outerY}
-                    stroke={LINE_COLOR}
-                    strokeWidth="1"
-                  />
-                  <text
-                    x={seg.textX}
-                    y={seg.textY}
-                    textAnchor={seg.textAnchor}
-                    dominantBaseline="middle"
-                    className="select-none font-medium"
-                    style={{ fontSize: 9, fill: LABEL_COLOR }}
-                  >
-                    {`${seg.label} (${(seg.pct * 100).toFixed(0)}%)`}
-                  </text>
                 </g>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-      <div
-        className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
-        style={{ margin: strokeWidth / 2 }}
-      >
-        <span className="text-lg font-semibold tabular-nums text-slate-100">
-          {formatValue(centerValue)}
-        </span>
-        <span className="text-[10px] text-slate-500 capitalize mt-0.5">
-          {centerLabel}
-        </span>
+                {seg.showLeader && (
+                  <g
+                    className="cursor-pointer hidden sm:block"
+                    onClick={() => setSelectedIndex(selectedIndex === i ? null : i)}
+                    onMouseEnter={() => setHoveredIndex(i)}
+                    onMouseLeave={() => setHoveredIndex(null)}
+                  >
+                    <line
+                      x1={seg.tick1X}
+                      y1={seg.tick1Y}
+                      x2={seg.tick2X}
+                      y2={seg.tick2Y}
+                      stroke={LINE_COLOR}
+                      strokeWidth="1"
+                    />
+                    <line
+                      x1={seg.innerX}
+                      y1={seg.innerY}
+                      x2={seg.outerX}
+                      y2={seg.outerY}
+                      stroke={LINE_COLOR}
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={seg.textX}
+                      y={seg.textY}
+                      textAnchor={seg.textAnchor}
+                      dominantBaseline="middle"
+                      className="select-none font-medium"
+                      style={{ fontSize: 9, fill: LABEL_COLOR }}
+                    >
+                      {`${seg.label} (${(seg.pct * 100).toFixed(0)}%)`}
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+        <div className="absolute inset-[28%] flex flex-col items-center justify-center pointer-events-none text-center px-1">
+          <span
+            className={`font-semibold tabular-nums text-slate-100 leading-tight max-w-full ${centerValueClass}`}
+          >
+            {centerText}
+          </span>
+          <span className="text-[10px] text-slate-500 capitalize mt-0.5 truncate max-w-full">
+            {centerLabel}
+          </span>
+        </div>
       </div>
       {overflowLabels.length > 0 && (
         <ul className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1.5">
@@ -193,9 +202,16 @@ export function DonutChart({
                   onMouseEnter={() => setHoveredIndex(idx)}
                   onMouseLeave={() => setHoveredIndex(null)}
                 >
-                  <span className="w-2 h-2 rounded-full shrink-0 bg-slate-500" />
-                  <span className="text-slate-400 capitalize">{seg.label}</span>
-                  <span className="text-slate-500">({(seg.pct * 100).toFixed(0)}%)</span>
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: seg.color }}
+                  />
+                  <span className="text-slate-400 capitalize truncate max-w-[7rem]">
+                    {seg.label}
+                  </span>
+                  <span className="text-slate-500 shrink-0">
+                    ({(seg.pct * 100).toFixed(0)}%)
+                  </span>
                 </button>
               </li>
             );

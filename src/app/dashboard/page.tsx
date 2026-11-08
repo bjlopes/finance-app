@@ -2,22 +2,18 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { TrendingUp, TrendingDown, Wallet, Receipt, Tag, ChevronLeft, ChevronRight, Check, ChevronDown, X, FolderKanban } from "lucide-react";
-import { buildTagSpendingHierarchy } from "@/lib/tags-utils";
 import { GastosPorTagHierarquico } from "@/components/GastosPorTagHierarquico";
 import { DonutChart } from "@/components/DonutChart";
 import Link from "next/link";
 import { useData } from "@/context/DataContext";
 import { getMesEfetivo } from "@/lib/fluxoCaixa";
-import { isFluxoReal, isTransacaoInvestimento, isTransacaoProjeto, hasTagTransacoesInternas, calcularMovimentosInvestimento, calcularMovimentosProjeto, calcularSaldoMes, calcularSaldosContaMes, somarSaldoPorContaMes, totalReceitasDashboard, totalGastosDashboard, getContaDestinoTransferencia, getContaOrigemTransferencia, resolverNomeProjeto } from "@/lib/transferencias";
+import { getContaDestinoTransferencia, getContaOrigemTransferencia, resolverNomeProjeto } from "@/lib/transferencias";
+import { calcDashboardStats, type DashboardPeriodo } from "@/lib/dashboardStats";
 import { formatLocalDate } from "@/lib/dateUtils";
 import { compareTransacoesDesc } from "@/lib/transacoes-utils";
 
 const DASHBOARD_CONTAS_KEY = "finance-app-dashboard-contas";
-
-const MESES = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
-];
+const DASHBOARD_PERIODO_KEY = "finance-app-dashboard-periodo";
 
 function loadDashboardContas(contas: { nome: string }[]): string[] | null {
   if (typeof window === "undefined") return null;
@@ -49,6 +45,7 @@ export default function DashboardPage() {
   const now = new Date();
   const mesAtualPadrao = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const [mesSelecionado, setMesSelecionado] = useState(mesAtualPadrao);
+  const [periodo, setPeriodo] = useState<DashboardPeriodo>("mes");
   const [contasDashboard, setContasDashboard] = useState<string[] | null>(null);
   const [contasDropdownOpen, setContasDropdownOpen] = useState(false);
   const [receitasModalOpen, setReceitasModalOpen] = useState(false);
@@ -63,6 +60,16 @@ export default function DashboardPage() {
     const saved = loadDashboardContas(contas);
     setContasDashboard(saved);
   }, [contas]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem(DASHBOARD_PERIODO_KEY);
+      if (raw === "mes" || raw === "ytd") setPeriodo(raw);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -87,125 +94,54 @@ export default function DashboardPage() {
     setContasDashboard(null);
     saveDashboardContas(null);
   };
+  const escolherPeriodo = (next: DashboardPeriodo) => {
+    setPeriodo(next);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(DASHBOARD_PERIODO_KEY, next);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
 
-  const stats = useMemo(() => {
-    let transacoesMes = transacoes.filter(
-      (t) => getMesEfetivo(t, contas) === mesSelecionado
+  const isYtd = periodo === "ytd";
+
+  const stats = useMemo(
+    () =>
+      calcDashboardStats(
+        transacoes,
+        tags,
+        contas,
+        mesSelecionado,
+        contasAtivas,
+        periodo
+      ),
+    [transacoes, tags, contas, mesSelecionado, contasAtivas, periodo]
+  );
+
+  const maxBreakdownAbs = useMemo(() => {
+    if (stats.breakdownMensal.length === 0) return 1;
+    return Math.max(
+      1,
+      ...stats.breakdownMensal.flatMap((m) => [
+        Math.abs(m.gastos),
+        Math.abs(m.saldo),
+      ])
     );
-    transacoesMes = transacoesMes.filter((t) => contasAtivas.includes(t.conta));
-
-    const gastos = transacoesMes.filter(
-      (t) =>
-        t.valor < 0 &&
-        isFluxoReal(t) &&
-        !isTransacaoInvestimento(t, contas, tags) &&
-        !isTransacaoProjeto(t, contas, tags) &&
-        !hasTagTransacoesInternas(t, tags)
-    );
-    const receitas = transacoesMes.filter(
-      (t) =>
-        t.valor > 0 &&
-        isFluxoReal(t) &&
-        !isTransacaoInvestimento(t, contas, tags) &&
-        !isTransacaoProjeto(t, contas, tags) &&
-        !hasTagTransacoesInternas(t, tags)
-    );
-    const gastosFluxo = gastos.reduce((sum, t) => sum + Math.abs(t.valor), 0);
-    const receitasFluxo = receitas.reduce((sum, t) => sum + t.valor, 0);
-
-    const temContaInvestimento = contas.some((c) => c.isInvestimento);
-    const investimento = calcularMovimentosInvestimento(
-      transacoes,
-      contas,
-      mesSelecionado,
-      (t) => getMesEfetivo(t, contas),
-      contasAtivas,
-      tags
-    );
-
-    const temContaProjeto = contas.some((c) => c.isProjeto);
-    const projeto = calcularMovimentosProjeto(
-      transacoes,
-      contas,
-      mesSelecionado,
-      (t) => getMesEfetivo(t, contas),
-      contasAtivas,
-      tags
-    );
-
-    const totalGastos = totalGastosDashboard(gastosFluxo);
-    const totalReceitas = totalReceitasDashboard(receitasFluxo);
-    const saldo = calcularSaldoMes(totalReceitas, totalGastos);
-
-    const gastosPorTagId: Record<string, number> = {};
-    gastos.forEach((t) => {
-      t.tagIds.forEach((tagId) => {
-        gastosPorTagId[tagId] = (gastosPorTagId[tagId] || 0) + Math.abs(t.valor);
-      });
-    });
-
-    const tagHierarchy = buildTagSpendingHierarchy(tags, gastosPorTagId);
-
-    const saldosConta = calcularSaldosContaMes(
-      transacoes,
-      transacoesMes,
-      contas,
-      mesSelecionado,
-      contasAtivas
-    );
-    const { saldoInicial: saldoInicialPorConta, movimentoMes: movimentoPorConta, saldoFinal: saldoFinalPorConta, pagamentosFatura } =
-      saldosConta;
-    // Só contas de caixa: carry-over começa em jul/2026; aportes reduzem o saldo da origem.
-    const somaCaixaMes = somarSaldoPorContaMes(saldoFinalPorConta, contas, "caixa");
-
-    const topContas = Object.entries(saldoFinalPorConta)
-      .filter(([, saldo]) => saldo !== 0)
-      .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a));
-
-    const maioresGastos = [...gastos]
-      .sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor))
-      .slice(0, 5);
-
-    const [ano, mes] = mesSelecionado.split("-").map(Number);
-    return {
-      mesLabel: `${MESES[mes - 1]} ${ano}`,
-      totalGastosMes: totalGastos,
-      totalReceitasMes: totalReceitas,
-      gastosFluxo,
-      receitasFluxo,
-      saldoMes: saldo,
-      somaCaixaMes,
-      saldoInicialPorConta,
-      movimentoPorConta,
-      saldoFinalPorConta,
-      pagamentosFatura,
-      tagHierarchy,
-      gastos,
-      receitas,
-      topContas,
-      maioresGastos,
-      qtdTransacoesMes: transacoesMes.length,
-      qtdGastos: gastos.length,
-      qtdReceitas: receitas.length,
-      totalTransacoes: transacoes.length,
-      temContaInvestimento,
-      investimento,
-      temContaProjeto,
-      projeto,
-    };
-  }, [transacoes, tags, contas, mesSelecionado, contasAtivas]);
+  }, [stats.breakdownMensal]);
 
   const transacoesContaSaldoDetalhe = useMemo(() => {
     if (!contaSaldoModal) return [];
     return transacoes
       .filter(
         (t) =>
-          getMesEfetivo(t, contas) === mesSelecionado &&
+          getMesEfetivo(t, contas) === stats.mesReferencia &&
           contasAtivas.includes(t.conta) &&
           t.conta === contaSaldoModal
       )
       .sort(compareTransacoesDesc);
-  }, [contaSaldoModal, transacoes, contas, mesSelecionado, contasAtivas]);
+  }, [contaSaldoModal, transacoes, contas, stats.mesReferencia, contasAtivas]);
 
   const movimentoContaModal = contaSaldoModal
     ? stats.movimentoPorConta[contaSaldoModal] ?? 0
@@ -261,6 +197,38 @@ export default function DashboardPage() {
         <div className="min-w-0">
           <h1 className="text-[length:var(--fluid-text-2xl)] font-bold text-slate-100">Dashboard</h1>
           <p className="text-[length:var(--fluid-text-sm)] text-slate-400 mt-1">{stats.mesLabel}</p>
+          <div
+            className="mt-3 inline-flex rounded-lg border border-slate-700 bg-slate-800/80 p-0.5"
+            role="tablist"
+            aria-label="Período do dashboard"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!isYtd}
+              onClick={() => escolherPeriodo("mes")}
+              className={`min-h-[36px] px-3.5 rounded-md text-sm font-medium transition-colors ${
+                !isYtd
+                  ? "bg-slate-700 text-slate-100 shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Mês
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={isYtd}
+              onClick={() => escolherPeriodo("ytd")}
+              className={`min-h-[36px] px-3.5 rounded-md text-sm font-medium transition-colors ${
+                isYtd
+                  ? "bg-slate-700 text-slate-100 shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              YTD
+            </button>
+          </div>
         </div>
         <div className="flex flex-col gap-2 w-full sm:flex-row sm:flex-nowrap sm:items-center sm:justify-end sm:w-auto sm:max-w-full sm:shrink-0">
           {contas.length > 0 && (
@@ -354,20 +322,23 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-6 phone:gap-4 lg:grid-cols-[1fr,auto] lg:items-start lg:gap-8 ipad:grid-cols-[1fr,minmax(260px,320px)] ipad:gap-10">
           {/* Coluna esquerda: Fluxo + Gastos por tag + conta + maiores (uma coluna só no iPad landscape) */}
           <div className="space-y-6 lg:pr-6 lg:border-r lg:border-slate-700/50 lg:min-w-0 ipad:pr-8 ipad:min-w-0">
-            <h2 className="text-lg font-semibold text-slate-200 border-b border-slate-700/50 pb-3">
-              Fluxo do mês
-            </h2>
-            <p className="text-xs text-slate-500 -mt-4">
-              Custo de vida — aportes/resgates em Investimentos; projetos em Projetos
-            </p>
+            <div className="space-y-1.5 border-b border-slate-700/50 pb-3">
+              <h2 className="text-lg font-semibold text-slate-200">
+                {isYtd ? "Fluxo YTD" : "Fluxo do mês"}
+              </h2>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Custo de vida — aportes/resgates em Investimentos; projetos em Projetos
+                {isYtd ? " · soma dos meses no intervalo" : ""}
+              </p>
+            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="flex items-center gap-2 text-slate-400 text-sm mb-1">
-                  <TrendingDown size={16} />
-                  Gastos
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-slate-400 text-sm mb-1 min-w-0">
+                  <TrendingDown size={16} className="shrink-0" />
+                  <span className="truncate">Gastos</span>
                 </div>
-                <p className="text-lg font-bold text-red-400">
+                <p className="text-[15px] sm:text-lg font-bold text-red-400 tabular-nums tracking-tight leading-snug">
                   {formatBRL(stats.totalGastosMes)}
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -377,13 +348,13 @@ export default function DashboardPage() {
               <button
                 type="button"
                 onClick={() => stats.qtdReceitas > 0 && setReceitasModalOpen(true)}
-                className={`text-left ${stats.qtdReceitas > 0 ? "cursor-pointer hover:opacity-90" : "cursor-default"}`}
+                className={`text-left min-w-0 ${stats.qtdReceitas > 0 ? "cursor-pointer hover:opacity-90" : "cursor-default"}`}
               >
-                <div className="flex items-center gap-2 text-slate-400 text-sm mb-1">
-                  <TrendingUp size={16} />
-                  Receitas
+                <div className="flex items-center gap-1.5 text-slate-400 text-sm mb-1 min-w-0">
+                  <TrendingUp size={16} className="shrink-0" />
+                  <span className="truncate">Receitas</span>
                 </div>
-                <p className="text-lg font-bold text-brand-400">
+                <p className="text-[15px] sm:text-lg font-bold text-brand-400 tabular-nums tracking-tight leading-snug">
                   {formatBRL(stats.totalReceitasMes)}
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -393,13 +364,15 @@ export default function DashboardPage() {
             </div>
 
             <div className="py-3 border-y border-slate-700/50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-slate-300">
-                  <Wallet size={18} />
-                  <span className="font-medium">Saldo do mês</span>
+              <div className="flex items-center justify-between gap-3 min-w-0">
+                <div className="flex items-center gap-2 text-slate-300 min-w-0">
+                  <Wallet size={18} className="shrink-0" />
+                  <span className="font-medium truncate">
+                    {isYtd ? "Saldo YTD" : "Saldo do mês"}
+                  </span>
                 </div>
                 <p
-                  className={`text-lg font-bold ${
+                  className={`text-[15px] sm:text-lg font-bold tabular-nums tracking-tight shrink-0 ${
                     stats.saldoMes >= 0 ? "text-brand-400" : "text-red-400"
                   }`}
                 >
@@ -408,13 +381,64 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-sm text-slate-400">
-              <span className="flex items-center gap-2">
-                <Receipt size={16} />
-                Total no mês
+            <div className="flex items-center justify-between gap-3 text-sm text-slate-400 min-w-0">
+              <span className="flex items-center gap-2 min-w-0">
+                <Receipt size={16} className="shrink-0" />
+                <span className="truncate">
+                  {isYtd ? "Total no período" : "Total no mês"}
+                </span>
               </span>
-              <span>{stats.qtdTransacoesMes} transações</span>
+              <span className="shrink-0 tabular-nums">
+                {stats.qtdTransacoesMes} transações
+              </span>
             </div>
+
+            {isYtd && stats.breakdownMensal.length > 0 && (
+              <div className="pt-3 border-t border-slate-700/50 space-y-3 min-w-0">
+                <h3 className="text-slate-300 font-medium text-sm">
+                  Evolução mensal (custo de vida)
+                </h3>
+                <div className="flex items-end gap-1 sm:gap-1.5 h-28 sm:h-24 w-full min-w-0">
+                  {stats.breakdownMensal.map((m) => {
+                    const hGastos = Math.round((m.gastos / maxBreakdownAbs) * 100);
+                    const hSaldo = Math.round((Math.abs(m.saldo) / maxBreakdownAbs) * 100);
+                    const mesNum = Number(m.mesYm.slice(5));
+                    return (
+                      <div
+                        key={m.mesYm}
+                        className="flex-1 min-w-0 flex flex-col items-center justify-end gap-1 h-full"
+                        title={`${m.mesCurto}: gastos ${formatBRL(m.gastos)} · saldo ${formatBRL(m.saldo)}`}
+                      >
+                        <div className="w-full max-w-[1.25rem] mx-auto flex items-end justify-center gap-px flex-1">
+                          <div
+                            className="flex-1 min-w-[3px] rounded-t bg-red-400/70"
+                            style={{ height: `${Math.max(hGastos, m.gastos > 0 ? 4 : 0)}%` }}
+                          />
+                          <div
+                            className={`flex-1 min-w-[3px] rounded-t ${
+                              m.saldo >= 0 ? "bg-brand-400/70" : "bg-amber-400/60"
+                            }`}
+                            style={{ height: `${Math.max(hSaldo, m.saldo !== 0 ? 4 : 0)}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] text-slate-500 tabular-nums leading-none w-full text-center truncate">
+                          <span className="sm:hidden">{mesNum}</span>
+                          <span className="hidden sm:inline">{m.mesCurto}</span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-sm bg-red-400/70" /> Gastos
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-sm bg-brand-400/70" /> Saldo
+                  </span>
+                </div>
+              </div>
+            )}
 
             {(stats.temContaInvestimento ||
               stats.investimento.aportes > 0 ||
@@ -422,22 +446,24 @@ export default function DashboardPage() {
               <div className="pt-3 border-t border-slate-700/50 space-y-3">
                 <h3 className="flex items-center gap-2 text-slate-300 font-medium text-sm">
                   <TrendingUp size={16} className="text-emerald-400" />
-                  Investimentos
+                  {isYtd ? "Investimentos YTD" : "Investimentos"}
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <button
                     type="button"
                     onClick={() =>
                       stats.investimento.qtdAportes > 0 && setAportesModalOpen(true)
                     }
-                    className={`text-left ${
+                    className={`text-left min-w-0 ${
                       stats.investimento.qtdAportes > 0
                         ? "cursor-pointer hover:opacity-90"
                         : "cursor-default"
                     }`}
                   >
-                    <p className="text-xs text-slate-500 mb-1">Aportes no mês</p>
-                    <p className="text-lg font-bold text-emerald-400 tabular-nums">
+                    <p className="text-xs text-slate-500 mb-1 truncate">
+                      {isYtd ? "Aportes" : "Aportes no mês"}
+                    </p>
+                    <p className="text-[15px] sm:text-lg font-bold text-emerald-400 tabular-nums tracking-tight leading-snug">
                       {formatBRL(stats.investimento.aportes)}
                     </p>
                     <p className="text-xs text-slate-500 mt-0.5">
@@ -450,14 +476,16 @@ export default function DashboardPage() {
                     onClick={() =>
                       stats.investimento.qtdResgates > 0 && setResgatesModalOpen(true)
                     }
-                    className={`text-left ${
+                    className={`text-left min-w-0 ${
                       stats.investimento.qtdResgates > 0
                         ? "cursor-pointer hover:opacity-90"
                         : "cursor-default"
                     }`}
                   >
-                    <p className="text-xs text-slate-500 mb-1">Resgates no mês</p>
-                    <p className="text-lg font-bold text-sky-400 tabular-nums">
+                    <p className="text-xs text-slate-500 mb-1 truncate">
+                      {isYtd ? "Resgates" : "Resgates no mês"}
+                    </p>
+                    <p className="text-[15px] sm:text-lg font-bold text-sky-400 tabular-nums tracking-tight leading-snug">
                       {formatBRL(stats.investimento.resgates)}
                     </p>
                     <p className="text-xs text-slate-500 mt-0.5">
@@ -484,22 +512,24 @@ export default function DashboardPage() {
               <div className="pt-3 border-t border-slate-700/50 space-y-3">
                 <h3 className="flex items-center gap-2 text-slate-300 font-medium text-sm">
                   <FolderKanban size={16} className="text-violet-300" />
-                  Projetos
+                  {isYtd ? "Projetos YTD" : "Projetos"}
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <button
                     type="button"
                     onClick={() =>
                       stats.projeto.qtdEntradas > 0 && setProjetoEntradasModalOpen(true)
                     }
-                    className={`text-left ${
+                    className={`text-left min-w-0 ${
                       stats.projeto.qtdEntradas > 0
                         ? "cursor-pointer hover:opacity-90"
                         : "cursor-default"
                     }`}
                   >
-                    <p className="text-xs text-slate-500 mb-1">Entradas no mês</p>
-                    <p className="text-lg font-bold text-brand-400 tabular-nums">
+                    <p className="text-xs text-slate-500 mb-1 truncate">
+                      {isYtd ? "Entradas" : "Entradas no mês"}
+                    </p>
+                    <p className="text-[15px] sm:text-lg font-bold text-brand-400 tabular-nums tracking-tight leading-snug">
                       {formatBRL(stats.projeto.entradas)}
                     </p>
                     <p className="text-xs text-slate-500 mt-0.5">
@@ -512,14 +542,16 @@ export default function DashboardPage() {
                     onClick={() =>
                       stats.projeto.qtdSaidas > 0 && setProjetoSaidasModalOpen(true)
                     }
-                    className={`text-left ${
+                    className={`text-left min-w-0 ${
                       stats.projeto.qtdSaidas > 0
                         ? "cursor-pointer hover:opacity-90"
                         : "cursor-default"
                     }`}
                   >
-                    <p className="text-xs text-slate-500 mb-1">Saídas no mês</p>
-                    <p className="text-lg font-bold text-red-400 tabular-nums">
+                    <p className="text-xs text-slate-500 mb-1 truncate">
+                      {isYtd ? "Saídas" : "Saídas no mês"}
+                    </p>
+                    <p className="text-[15px] sm:text-lg font-bold text-red-400 tabular-nums tracking-tight leading-snug">
                       {formatBRL(stats.projeto.saidas)}
                     </p>
                     <p className="text-xs text-slate-500 mt-0.5">
@@ -528,10 +560,12 @@ export default function DashboardPage() {
                     </p>
                   </button>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-400">Líquido no mês</span>
+                <div className="flex items-center justify-between gap-3 text-sm min-w-0">
+                  <span className="text-slate-400 truncate">
+                    {isYtd ? "Líquido YTD" : "Líquido no mês"}
+                  </span>
                   <span
-                    className={`font-medium tabular-nums ${
+                    className={`font-medium tabular-nums shrink-0 ${
                       stats.projeto.liquido >= 0 ? "text-brand-400" : "text-red-400"
                     }`}
                   >
@@ -576,7 +610,7 @@ export default function DashboardPage() {
               <div className="pt-2 border-t border-slate-700/50">
                 <h3 className="flex items-center gap-2 text-slate-300 font-medium mb-3">
                   <Tag size={16} />
-                  Gastos por tag
+                  {isYtd ? "Gastos por tag YTD" : "Gastos por tag"}
                 </h3>
                 <div className="mb-4 lg:hidden">
                   <DonutChart
@@ -601,11 +635,13 @@ export default function DashboardPage() {
 
             {stats.topContas.length > 0 && (
               <div className="pt-2 border-t border-slate-700/50">
-                <h3 className="text-slate-300 font-medium">Saldo por conta</h3>
+                <h3 className="text-slate-300 font-medium">
+                  {isYtd ? "Saldo por conta (fim do período)" : "Saldo por conta"}
+                </h3>
                 <p className="text-xs text-slate-500 mb-3 mt-0.5">
-                  Carry-over em contas de caixa a partir de jul/2026. Cartões não
-                  acumulam; faturas com conta de pagamento saem no vencimento
-                  (fechamento + 7 dias).
+                  {isYtd
+                    ? "Saldos de caixa ao fim do período (mês selecionado). Carry-over a partir de jul/2026; faturas saem no vencimento (fechamento + 7 dias)."
+                    : "Carry-over em contas de caixa a partir de jul/2026. Cartões não acumulam; faturas com conta de pagamento saem no vencimento (fechamento + 7 dias)."}
                 </p>
                 <ul className="space-y-1">
                   {stats.topContas.map(([conta, saldo]) => (
@@ -635,7 +671,7 @@ export default function DashboardPage() {
             {stats.maioresGastos.length > 0 && (
               <div className="pt-2 border-t border-slate-700/50">
                 <h3 className="text-slate-300 font-medium mb-3">
-                  Maiores gastos do mês
+                  {isYtd ? "Maiores gastos YTD" : "Maiores gastos do mês"}
                 </h3>
                 <ul className="space-y-2">
                   {stats.maioresGastos.map((t) => (
@@ -658,7 +694,7 @@ export default function DashboardPage() {
               stats.maioresGastos.length === 0 && (
                 <div className="pt-2 border-t border-slate-700/50 space-y-2">
                   <p className="text-slate-500 text-sm">
-                    Nenhum gasto neste mês.{" "}
+                    {isYtd ? "Nenhum gasto no período." : "Nenhum gasto neste mês."}{" "}
                     <Link href="/" className="text-brand-500 hover:underline">
                       Adicione uma transação
                     </Link>
@@ -799,7 +835,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <Link
-                href={`/transacoes?conta=${encodeURIComponent(contaSaldoModal)}&mesEfetivo=${encodeURIComponent(mesSelecionado)}`}
+                href={`/transacoes?conta=${encodeURIComponent(contaSaldoModal)}&mesEfetivo=${encodeURIComponent(stats.mesReferencia)}`}
                 onClick={() => setContaSaldoModal(null)}
                 className="mt-3 block text-center text-sm text-brand-400 hover:text-brand-300"
               >
@@ -820,7 +856,9 @@ export default function DashboardPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0 gap-2">
-              <h4 className="font-semibold text-slate-200">Receitas do mês</h4>
+              <h4 className="font-semibold text-slate-200">
+                {isYtd ? "Receitas YTD" : "Receitas do mês"}
+              </h4>
               <button
                 type="button"
                 onClick={() => setReceitasModalOpen(false)}
@@ -869,7 +907,9 @@ export default function DashboardPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0 gap-2">
-              <h4 className="font-semibold text-slate-200">Aportes do mês</h4>
+              <h4 className="font-semibold text-slate-200">
+                {isYtd ? "Aportes YTD" : "Aportes do mês"}
+              </h4>
               <button
                 type="button"
                 onClick={() => setAportesModalOpen(false)}
@@ -923,7 +963,9 @@ export default function DashboardPage() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="p-4 border-b border-slate-700/50 flex items-center justify-between shrink-0 gap-2">
-              <h4 className="font-semibold text-slate-200">Resgates do mês</h4>
+              <h4 className="font-semibold text-slate-200">
+                {isYtd ? "Resgates YTD" : "Resgates do mês"}
+              </h4>
               <button
                 type="button"
                 onClick={() => setResgatesModalOpen(false)}

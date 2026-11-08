@@ -1,107 +1,15 @@
 /**
- * Agent 08 — lógica de stats do dashboard (espelho do useMemo)
+ * Agent 08 — lógica de stats do dashboard (mês + YTD)
  */
 import { assert, section, approx, exitCode } from "./_helpers";
-import { getMesEfetivo } from "../../src/lib/fluxoCaixa";
 import {
-  isFluxoReal,
-  isTransacaoInvestimento,
-  isTransacaoProjeto,
-  calcularMovimentosInvestimento,
-  calcularMovimentosProjeto,
-  calcularSaldoMes,
-  calcularSaldosContaMes,
-  somarSaldoPorContaMes,
-  totalReceitasDashboard,
-  totalGastosDashboard,
-} from "../../src/lib/transferencias";
-import { buildTagSpendingHierarchy } from "../../src/lib/tags-utils";
+  calcDashboardStats,
+  getMesesYtd,
+  formatDashboardPeriodoLabel,
+} from "../../src/lib/dashboardStats";
+import { isTransacaoProjeto } from "../../src/lib/transferencias";
 import type { Transacao, Tag } from "../../src/types";
 import type { ContaItem } from "../../src/context/DataContext";
-
-function calcDashboardStats(
-  transacoes: Transacao[],
-  tags: Tag[],
-  contas: ContaItem[],
-  mesSelecionado: string,
-  contasAtivas: string[]
-) {
-  let transacoesMes = transacoes.filter(
-    (t) => getMesEfetivo(t, contas) === mesSelecionado
-  );
-  transacoesMes = transacoesMes.filter((t) => contasAtivas.includes(t.conta));
-
-  const gastos = transacoesMes.filter(
-    (t) =>
-      t.valor < 0 &&
-      isFluxoReal(t) &&
-      !isTransacaoInvestimento(t, contas, tags) &&
-      !isTransacaoProjeto(t, contas, tags)
-  );
-  const receitas = transacoesMes.filter(
-    (t) =>
-      t.valor > 0 &&
-      isFluxoReal(t) &&
-      !isTransacaoInvestimento(t, contas, tags) &&
-      !isTransacaoProjeto(t, contas, tags)
-  );
-  const gastosFluxo = gastos.reduce((sum, t) => sum + Math.abs(t.valor), 0);
-  const receitasFluxo = receitas.reduce((sum, t) => sum + t.valor, 0);
-
-  const gastosPorTagId: Record<string, number> = {};
-  gastos.forEach((t) => {
-    t.tagIds.forEach((tagId) => {
-      gastosPorTagId[tagId] = (gastosPorTagId[tagId] || 0) + Math.abs(t.valor);
-    });
-  });
-
-  const saldosConta = calcularSaldosContaMes(
-    transacoes,
-    transacoesMes,
-    contas,
-    mesSelecionado,
-    contasAtivas
-  );
-  const somaCaixaMes = somarSaldoPorContaMes(saldosConta.saldoFinal, contas, "caixa");
-
-  const investimento = calcularMovimentosInvestimento(
-    transacoes,
-    contas,
-    mesSelecionado,
-    (t) => getMesEfetivo(t, contas),
-    contasAtivas,
-    tags
-  );
-
-  const projeto = calcularMovimentosProjeto(
-    transacoes,
-    contas,
-    mesSelecionado,
-    (t) => getMesEfetivo(t, contas),
-    contasAtivas,
-    tags
-  );
-
-  const totalGastos = totalGastosDashboard(gastosFluxo);
-  const totalReceitas = totalReceitasDashboard(receitasFluxo);
-  const saldo = calcularSaldoMes(totalReceitas, totalGastos);
-
-  return {
-    totalGastos,
-    totalReceitas,
-    gastosFluxo,
-    receitasFluxo,
-    saldo,
-    somaCaixaMes,
-    gastosPorTagId,
-    saldoInicialPorConta: saldosConta.saldoInicial,
-    movimentoPorConta: saldosConta.movimentoMes,
-    saldoFinalPorConta: saldosConta.saldoFinal,
-    tagHierarchy: buildTagSpendingHierarchy(tags, gastosPorTagId),
-    investimento,
-    projeto,
-  };
-}
 
 const contas: ContaItem[] = [
   { id: "1", nome: "Nubank" },
@@ -143,9 +51,9 @@ section("Fluxo do mês = custo de vida (sem aportes/resgates)");
 const stats = calcDashboardStats(transacoes, tags, contas, "2025-06", ["Nubank", "Investimentos"]);
 assert(approx(stats.receitasFluxo, 5000), "receitas de fluxo = salário");
 assert(approx(stats.gastosFluxo, 2050), "gastos de fluxo = uber + aluguel");
-assert(approx(stats.totalReceitas, 5000), "receitas = só salário");
-assert(approx(stats.totalGastos, 2050), "gastos sem aporte");
-assert(approx(stats.saldo, 2950), "saldo = custo de vida (sem aporte)");
+assert(approx(stats.totalReceitasMes, 5000), "receitas = só salário");
+assert(approx(stats.totalGastosMes, 2050), "gastos sem aporte");
+assert(approx(stats.saldoMes, 2950), "saldo = custo de vida (sem aporte)");
 assert(approx(stats.somaCaixaMes, 1950), "caixa = nubank após aporte");
 assert(approx(stats.receitasFluxo - stats.gastosFluxo, 2950), "fluxo real bate com saldo de vida");
 assert(approx(stats.investimento.aportes, 1000), "aporte separado em investimentos");
@@ -163,9 +71,9 @@ const legadoComTag = calcDashboardStats(
   "2025-02",
   ["Nubank", "Investimentos"]
 );
-assert(approx(legadoComTag.totalGastos, 100), "tag investimento não entra em gastos");
-assert(approx(legadoComTag.totalReceitas, 0), "tag investimento não entra em receitas");
-assert(approx(legadoComTag.saldo, -100), "saldo de vida ignora investimento por tag");
+assert(approx(legadoComTag.totalGastosMes, 100), "tag investimento não entra em gastos");
+assert(approx(legadoComTag.totalReceitasMes, 0), "tag investimento não entra em receitas");
+assert(approx(legadoComTag.saldoMes, -100), "saldo de vida ignora investimento por tag");
 assert(approx(legadoComTag.investimento.aportes, 700), "aporte por tag");
 assert(approx(legadoComTag.investimento.resgates, 200), "resgate por tag");
 assert(approx(legadoComTag.somaCaixaMes, -600), "saldo de caixa inclui aporte/resgate tagged");
@@ -200,8 +108,8 @@ const comResgate = calcDashboardStats(
   ["Nubank", "Investimentos"]
 );
 assert(approx(comResgate.investimento.resgates, 300), "resgate contabilizado");
-assert(approx(comResgate.totalReceitas, 5000), "receitas sem resgate");
-assert(approx(comResgate.saldo, 2950), "saldo de custo de vida inalterado pelo resgate");
+assert(approx(comResgate.totalReceitasMes, 5000), "receitas sem resgate");
+assert(approx(comResgate.saldoMes, 2950), "saldo de custo de vida inalterado pelo resgate");
 assert(approx(comResgate.somaCaixaMes, 2250), "caixa final sobe com o resgate");
 
 section("Resgate alto cobre gastos sem poluir o fluxo de vida");
@@ -236,8 +144,8 @@ const resgateAlto = calcDashboardStats(
 );
 assert(approx(resgateAlto.receitasFluxo, 1000), "receitas de fluxo < gastos");
 assert(approx(resgateAlto.gastosFluxo, 3000), "gastos de fluxo maiores");
-assert(approx(resgateAlto.totalReceitas, 1000), "resgate não aparece nas receitas");
-assert(approx(resgateAlto.saldo, -2000), "saldo de vida = 1000 − 3000");
+assert(approx(resgateAlto.totalReceitasMes, 1000), "resgate não aparece nas receitas");
+assert(approx(resgateAlto.saldoMes, -2000), "saldo de vida = 1000 − 3000");
 assert(approx(resgateAlto.investimento.resgates, 5000), "resgate só em investimentos");
 assert(approx(resgateAlto.somaCaixaMes, 3000), "caixa final com resgate");
 
@@ -289,13 +197,13 @@ assert(comResgate.investimento.transacoesAporte.length === 1, "lista de aportes"
 section("Filtro de contas ativas");
 const soNubank = calcDashboardStats(transacoes, tags, contas, "2025-06", ["Nubank"]);
 assert(soNubank.saldoFinalPorConta["Investimentos"] === undefined, "conta inativa some do saldo");
-assert(approx(soNubank.totalReceitas, 5000), "receitas só da conta selecionada");
-assert(approx(soNubank.totalGastos, 2050), "gastos sem aporte no fluxo");
+assert(approx(soNubank.totalReceitasMes, 5000), "receitas só da conta selecionada");
+assert(approx(soNubank.totalGastosMes, 2050), "gastos sem aporte no fluxo");
 assert(approx(soNubank.investimento.aportes, 1000), "aporte ainda aparece em investimentos");
 
 const soInvestimentos = calcDashboardStats(transacoes, tags, contas, "2025-06", ["Investimentos"]);
-assert(approx(soInvestimentos.totalReceitas, 0), "salário em outra conta não entra nas receitas");
-assert(approx(soInvestimentos.totalGastos, 0), "gastos de outra conta não entram");
+assert(approx(soInvestimentos.totalReceitasMes, 0), "salário em outra conta não entra nas receitas");
+assert(approx(soInvestimentos.totalGastosMes, 0), "gastos de outra conta não entram");
 assert(approx(soInvestimentos.investimento.aportes, 0), "aporte de conta fora da seleção não conta");
 assert(approx(soInvestimentos.investimento.resgates, 0), "resgate para conta fora da seleção não conta");
 
@@ -328,8 +236,8 @@ const soNubankComResgate = calcDashboardStats(
   ["Nubank"]
 );
 assert(approx(soNubankComResgate.investimento.resgates, 300), "resgate para conta ativa conta");
-assert(approx(soNubankComResgate.totalReceitas, 5000), "receitas sem resgate");
-assert(approx(soNubankComResgate.saldo, 2950), "saldo de custo de vida coerente");
+assert(approx(soNubankComResgate.totalReceitasMes, 5000), "receitas sem resgate");
+assert(approx(soNubankComResgate.saldoMes, 2950), "saldo de custo de vida coerente");
 assert(approx(soNubankComResgate.somaCaixaMes, 2250), "caixa final com resgate");
 
 section("Projeto — fora do custo de vida e do caixa");
@@ -349,9 +257,9 @@ const comProjeto = calcDashboardStats(
   "2025-06",
   ["Nubank", "Investimentos", "Cabo Frio"]
 );
-assert(approx(comProjeto.totalGastos, 100), "gasto de projeto não entra em Gastos");
-assert(approx(comProjeto.totalReceitas, 5000), "entrada de projeto não entra em Receitas");
-assert(approx(comProjeto.saldo, 4900), "saldo de vida ignora projeto");
+assert(approx(comProjeto.totalGastosMes, 100), "gasto de projeto não entra em Gastos");
+assert(approx(comProjeto.totalReceitasMes, 5000), "entrada de projeto não entra em Receitas");
+assert(approx(comProjeto.saldoMes, 4900), "saldo de vida ignora projeto");
 assert(approx(comProjeto.gastosPorTagId["t2"] ?? 0, 100), "tag só com gasto de vida");
 assert(approx(comProjeto.projeto.entradas, 4000), "entrada no projeto");
 assert(approx(comProjeto.projeto.saidas, 2500), "saída no projeto");
@@ -407,7 +315,7 @@ const comTagProjeto = calcDashboardStats(
   "2025-06",
   ["Nubank", "Investimentos", "Cabo Frio"]
 );
-assert(approx(comTagProjeto.totalGastos, 100), "tag projeto fora de Gastos");
+assert(approx(comTagProjeto.totalGastosMes, 100), "tag projeto fora de Gastos");
 assert(approx(comTagProjeto.gastosPorTagId["t2"] ?? 0, 100), "gastos por tag só vida");
 assert(approx(comTagProjeto.gastosPorTagId["t-cf"] ?? 0, 0), "tag projeto fora de gastos por tag");
 assert(approx(comTagProjeto.projeto.saidas, 1500), "saídas = tag + ancestral + conta projeto");
@@ -443,7 +351,92 @@ const comAcento = calcDashboardStats(
   "2025-06",
   ["Nubank", "Cabo Frio"]
 );
-assert(approx(comAcento.totalGastos, 50), "só uber em gastos de vida");
+assert(approx(comAcento.totalGastosMes, 50), "só uber em gastos de vida");
 assert(approx(comAcento.projeto.saidas, 120), "match case-insensitive com nome do projeto");
+
+section("YTD — janela de meses e label");
+const mesesYtd = getMesesYtd("2025-06", new Date("2025-11-08T12:00:00"));
+assert(mesesYtd.length === 6, "Jan–Jun = 6 meses");
+assert(mesesYtd[0] === "2025-01", "começa em janeiro");
+assert(mesesYtd[5] === "2025-06", "termina no mês selecionado");
+assert(
+  formatDashboardPeriodoLabel("2025-06", "ytd", mesesYtd) === "Jan–Jun 2025",
+  "label Jan–Jun 2025"
+);
+const mesesCap = getMesesYtd("2025-12", new Date("2025-03-15T12:00:00"));
+assert(mesesCap.length === 3, "ano corrente cap no mês de hoje");
+assert(mesesCap[2] === "2025-03", "fim = março");
+
+section("YTD — soma fluxo de vida sem misturar investimento/projeto");
+const txsYtd: Transacao[] = [
+  { id: "y1", descricao: "Salário jan", valor: 4000, conta: "Nubank", data: "2025-01-05", tagIds: [] },
+  { id: "y2", descricao: "Mercado jan", valor: -500, conta: "Nubank", data: "2025-01-10", tagIds: ["t2"] },
+  { id: "y3", descricao: "Salário fev", valor: 4000, conta: "Nubank", data: "2025-02-05", tagIds: [] },
+  { id: "y4", descricao: "Uber fev", valor: -80, conta: "Nubank", data: "2025-02-12", tagIds: ["t1"] },
+  {
+    id: "y5",
+    descricao: "Aporte fev",
+    valor: -1000,
+    conta: "Nubank",
+    contaDestino: "Investimentos",
+    data: "2025-02-20",
+    tagIds: [],
+    transferenciaId: "tid-y",
+  },
+  {
+    id: "y6",
+    descricao: "Aporte fev",
+    valor: 1000,
+    conta: "Investimentos",
+    data: "2025-02-20",
+    tagIds: [],
+    transferenciaId: "tid-y",
+  },
+  { id: "y7", descricao: "Gasto projeto", valor: -300, conta: "Cabo Frio", data: "2025-02-18", tagIds: [] },
+  { id: "y8", descricao: "Entrada projeto", valor: 1000, conta: "Cabo Frio", data: "2025-01-20", tagIds: [] },
+];
+const ytd = calcDashboardStats(
+  txsYtd,
+  tags,
+  contasComProjeto,
+  "2025-02",
+  ["Nubank", "Investimentos", "Cabo Frio"],
+  "ytd",
+  new Date("2025-11-08T12:00:00")
+);
+assert(approx(ytd.totalReceitasMes, 8000), "receitas YTD = jan+fev");
+assert(approx(ytd.totalGastosMes, 580), "gastos YTD = 500+80 (sem aporte/projeto)");
+assert(approx(ytd.saldoMes, 7420), "saldo YTD = soma dos saldos de vida");
+assert(approx(ytd.investimento.aportes, 1000), "aporte YTD");
+assert(approx(ytd.projeto.entradas, 1000), "projeto entradas YTD");
+assert(approx(ytd.projeto.saidas, 300), "projeto saídas YTD");
+assert(approx(ytd.projeto.liquido, 700), "projeto líquido YTD");
+assert(approx(ytd.gastosPorTagId["t2"] ?? 0, 500), "tag casa YTD");
+assert(approx(ytd.gastosPorTagId["t1"] ?? 0, 80), "tag transporte YTD");
+assert(ytd.breakdownMensal.length === 2, "breakdown Jan–Fev");
+assert(approx(ytd.breakdownMensal[0].saldo, 3500), "saldo jan = 4000-500");
+assert(approx(ytd.breakdownMensal[1].saldo, 3920), "saldo fev = 4000-80");
+assert(ytd.mesReferencia === "2025-02", "referência = fim do YTD");
+// Antes do marco não há carry-over: caixa do fim do período = só movimentos de fev
+assert(approx(ytd.somaCaixaMes, 2920), "caixa fim fev = 4000-80-1000 (sem herdar jan)");
+
+const ytdMesIgual = calcDashboardStats(
+  txsYtd,
+  tags,
+  contasComProjeto,
+  "2025-02",
+  ["Nubank", "Investimentos", "Cabo Frio"],
+  "mes"
+);
+const fevSo = calcDashboardStats(
+  txsYtd,
+  tags,
+  contasComProjeto,
+  "2025-02",
+  ["Nubank", "Investimentos", "Cabo Frio"],
+  "mes"
+);
+assert(approx(ytdMesIgual.totalGastosMes, fevSo.totalGastosMes), "modo mês inalterado");
+assert(ytd.totalGastosMes > fevSo.totalGastosMes, "YTD maior que só fevereiro");
 
 process.exit(exitCode());
